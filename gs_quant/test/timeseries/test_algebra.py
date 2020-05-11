@@ -447,3 +447,81 @@ def test_filter():
         filter_(zero_neg_pos, 0, 0)
     with pytest.raises(MqValueError):
         filter_(zero_neg_pos, 0)
+
+
+def test_repeat():
+    with pytest.raises(MqError):
+        repeat(pd.Series, 0)
+    with pytest.raises(MqError):
+        repeat(pd.Series, 367)
+
+    sparse_index = pd.to_datetime(['2020-01-01', '2020-01-02', '2020-01-04', '2020-01-07'])
+    s = pd.Series([1, 2, 3, 4], index=sparse_index)
+
+    actual = repeat(s)
+    expected = pd.Series([1, 2, 2, 3, 3, 3, 4], index=pd.date_range(start='2020-01-01', end='2020-01-07', freq='D'))
+    assert_series_equal(actual, expected)
+
+    actual = repeat(s, 2)
+    expected = pd.Series([1, 2, 3, 4], index=pd.date_range(start='2020-01-01', end='2020-01-07', freq='2D'))
+    assert_series_equal(actual, expected)
+
+
+def test_and():
+    with pytest.raises(MqError):
+        and_()
+    with pytest.raises(MqError):
+        and_(pd.Series())
+    with pytest.raises(MqError):
+        and_(pd.Series(), 1)
+    with pytest.raises(MqError):
+        and_(pd.Series([2]), pd.Series())
+    assert and_(pd.Series(), pd.Series()).shape[0] == 0
+
+    a = pd.Series([0, 0, 0, 0, 1, 1, 1, 1])
+    b = pd.Series([0, 0, 1, 1, 0, 0, 1, 1])
+    c = pd.Series([0, 1, 0, 1, 0, 1, 0, 1])
+    assert_series_equal(and_(a, b), pd.Series([0] * 6 + [1] * 2), check_dtype=False)
+    assert_series_equal(and_(a, b, c), pd.Series([0] * 7 + [1]), check_dtype=False)
+    assert_series_equal(and_(pd.Series([0, 1]), pd.Series()), pd.Series([0] * 2), check_dtype=False)
+
+
+def test_or():
+    with pytest.raises(MqError):
+        or_()
+    with pytest.raises(MqError):
+        or_(pd.Series())
+    with pytest.raises(MqError):
+        or_(pd.Series(), 1)
+    with pytest.raises(MqError):
+        or_(pd.Series([2]), pd.Series())
+    assert or_(pd.Series(), pd.Series()).shape[0] == 0
+
+    a = pd.Series([0, 0, 0, 0, 1, 1, 1, 1])
+    b = pd.Series([0, 0, 1, 1, 0, 0, 1, 1])
+    c = pd.Series([0, 1, 0, 1, 0, 1, 0, 1])
+    assert_series_equal(or_(a, b), pd.Series([0] * 2 + [1] * 6), check_dtype=False)
+    assert_series_equal(or_(a, b, c), pd.Series([0] + [1] * 7), check_dtype=False)
+    assert_series_equal(or_(pd.Series([0, 1]), pd.Series()), pd.Series([0, 1]), check_dtype=False)
+
+
+def test_not():
+    with pytest.raises(MqError):
+        not_(pd.Series([2]))
+    assert not_(pd.Series()).shape[0] == 0
+    assert_series_equal(not_(pd.Series([0, 1])), pd.Series([1, 0]), check_dtype=False)
+
+
+def test_if():
+    with pytest.raises(MqError):
+        if_(pd.Series([-1, 0]), 5, 6)
+    with pytest.raises(MqError):
+        if_(pd.Series([1, 0]), 5, '6')
+
+    flags = pd.Series([0, 1])
+    truths = pd.Series([2, 2])
+
+    assert_series_equal(if_(flags, 2, 3), pd.Series([3, 2]))
+    assert_series_equal(if_(flags, truths, pd.Series([3, 3])), pd.Series([3, 2]))
+    assert_series_equal(if_(flags, truths, pd.Series([3], index=[100])),
+                        pd.Series([np.nan, 2]), check_dtype=False)

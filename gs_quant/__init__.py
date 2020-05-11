@@ -13,4 +13,11 @@ KIND, either express or implied.  See the License for the
 specific language governing permissions and limitations
 under the License.
 """
+
+from ._version import get_versions
+
 name = "gs_quant"
+__version__ = get_versions()['version']
+del get_versions
+
+version = __version__

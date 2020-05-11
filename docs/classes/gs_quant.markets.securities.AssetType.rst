@@ -18,6 +18,8 @@ AssetType
    .. autosummary::
    
       ~AssetType.BASKET
+      ~AssetType.CROSS
+      ~AssetType.CURRENCY
       ~AssetType.ETF
       ~AssetType.FUTURE
       ~AssetType.INDEX

@@ -16,12 +16,14 @@
 # a 1-line description. Type annotations should be provided for parameters.
 
 import datetime
-
 import numpy
 import scipy.stats.mstats as stats
-from scipy.stats import percentileofscore
-
+from scipy.stats import percentileofscore, scoreatpercentile
 from .algebra import *
+import statsmodels.api as sm
+from ..models.epidemiology import SIR, SEIR, EpidemicModel
+from ..data import DataContext
+
 
 """
 Stats library is for basic arithmetic and statistical operations on timeseries.
@@ -36,13 +38,13 @@ def min_(x: pd.Series, w: Union[Window, int] = Window(None, 0)) -> pd.Series:
     Minimum value of series over given window
 
     :param x: series: timeseries
-    :param w: Window or int: number of observations and ramp up to use. e.g. Window(22, 10) where 22 is the window size
-    and 10 the ramp up value. Window size defaults to length of series.
+    :param w: Window or int: size of window and ramp up to use. e.g. Window(22, 10) where 22 is the window size
+              and 10 the ramp up value. Window size defaults to length of series.
     :return: timeseries of minimum value
 
     **Usage**
 
-    Returns the minimum value of the series over each window:
+    Returns the minimum value of thee series over each window:
 
     :math:`R_t = min(X_{t-w+1}:X_t)`
 
@@ -63,7 +65,11 @@ def min_(x: pd.Series, w: Union[Window, int] = Window(None, 0)) -> pd.Series:
     """
     w = normalize_window(x, w)
     assert x.index.is_monotonic_increasing, "series index is monotonic increasing"
-    return apply_ramp(x.rolling(w.w, 0).min(), w)
+    if isinstance(w.w, pd.DateOffset):
+        values = [x.loc[(x.index > idx - w.w) & (x.index <= idx)].min() for idx in x.index]
+        return apply_ramp(pd.Series(values, index=x.index, dtype=np.dtype(float)), w)
+    else:
+        return apply_ramp(x.rolling(w.w, 0).min(), w)
 
 
 @plot_function
@@ -72,8 +78,8 @@ def max_(x: pd.Series, w: Union[Window, int] = Window(None, 0)) -> pd.Series:
     Maximum value of series over given window
 
     :param x: series: timeseries
-    :param w: Window or int: number of observations and ramp up to use. e.g. Window(22, 10) where 22 is the window size
-    and 10 the ramp up value. Window size defaults to length of series.
+    :param w: Window or int: size of window and ramp up to use. e.g. Window(22, 10) where 22 is the window size
+              and 10 the ramp up value. Window size defaults to length of series.
     :return: timeseries of maximum value
 
     **Usage**
@@ -99,7 +105,11 @@ def max_(x: pd.Series, w: Union[Window, int] = Window(None, 0)) -> pd.Series:
     """
     w = normalize_window(x, w)
     assert x.index.is_monotonic_increasing, "series index is monotonic increasing"
-    return apply_ramp(x.rolling(w.w, 0).max(), w)
+    if isinstance(w.w, pd.DateOffset):
+        values = [x.loc[(x.index > idx - w.w) & (x.index <= idx)].max() for idx in x.index]
+        return apply_ramp(pd.Series(values, index=x.index, dtype=np.dtype(float)), w)
+    else:
+        return apply_ramp(x.rolling(w.w, 0).max(), w)
 
 
 @plot_function
@@ -108,8 +118,8 @@ def range_(x: pd.Series, w: Union[Window, int] = Window(None, 0)) -> pd.Series:
     Range of series over given window
 
     :param x: series: timeseries
-    :param w: Window or int: number of observations and ramp up to use. e.g. Window(22, 10) where 22 is the window size
-    and 10 the ramp up value. Window size defaults to length of series.
+    :param w: Window or int: size of window and ramp up to use. e.g. Window(22, 10) where 22 is the window size
+              and 10 the ramp up value. Window size defaults to length of series.
     :return: timeseries of range
 
     **Usage**
@@ -148,8 +158,8 @@ def mean(x: pd.Series, w: Union[Window, int] = Window(None, 0)) -> pd.Series:
     Arithmetic mean of series over given window
 
     :param x: series: timeseries
-    :param w: Window or int: number of observations and ramp up to use. e.g. Window(22, 10) where 22 is the window size
-    and 10 the ramp up value. Window size defaults to length of series.
+    :param w: Window or int: size of window and ramp up to use. e.g. Window(22, 10) where 22 is the window size
+              and 10 the ramp up value. Window size defaults to length of series.
     :return: timeseries of mean value
 
     **Usage**
@@ -176,7 +186,11 @@ def mean(x: pd.Series, w: Union[Window, int] = Window(None, 0)) -> pd.Series:
     """
     w = normalize_window(x, w)
     assert x.index.is_monotonic_increasing, "series index is monotonic increasing"
-    return apply_ramp(x.rolling(w.w, 0).mean(), w)
+    if isinstance(w.w, pd.DateOffset):
+        values = [x.loc[(x.index > idx - w.w) & (x.index <= idx)].mean() for idx in x.index]
+        return apply_ramp(pd.Series(values, index=x.index, dtype=np.dtype(float)), w)
+    else:
+        return apply_ramp(x.rolling(w.w, 0).mean(), w)
 
 
 @plot_function
@@ -185,8 +199,8 @@ def median(x: pd.Series, w: Union[Window, int] = Window(None, 0)) -> pd.Series:
     Median value of series over given window
 
     :param x: series: timeseries
-    :param w: Window or int: number of observations and ramp up to use. e.g. Window(22, 10) where 22 is the window size
-    and 10 the ramp up value. Window size defaults to length of series.
+    :param w: Window or int: size of window and ramp up to use. e.g. Window(22, 10) where 22 is the window size
+              and 10 the ramp up value. Window size defaults to length of series.
     :return: timeseries of median value
 
     **Usage**
@@ -215,7 +229,11 @@ def median(x: pd.Series, w: Union[Window, int] = Window(None, 0)) -> pd.Series:
     """
     w = normalize_window(x, w)
     assert x.index.is_monotonic_increasing, "series index is monotonic increasing"
-    return apply_ramp(x.rolling(w.w, 0).median(), w)
+    if isinstance(w.w, pd.DateOffset):
+        values = [x.loc[(x.index > idx - w.w) & (x.index <= idx)].median() for idx in x.index]
+        return apply_ramp(pd.Series(values, index=x.index, dtype=np.dtype(float)), w)
+    else:
+        return apply_ramp(x.rolling(w.w, 0).median(), w)
 
 
 @plot_function
@@ -224,8 +242,8 @@ def mode(x: pd.Series, w: Union[Window, int] = Window(None, 0)) -> pd.Series:
     Most common value in series over given window
 
     :param x: series: timeseries
-    :param w: Window or int: number of observations and ramp up to use. e.g. Window(22, 10) where 22 is the window size
-    and 10 the ramp up value. Window size defaults to length of series.
+    :param w: Window or int: size of window and ramp up to use. e.g. Window(22, 10) where 22 is the window size
+              and 10 the ramp up value. Window size defaults to length of series.
     :return: timeseries of mode value
 
     **Usage**
@@ -249,7 +267,11 @@ def mode(x: pd.Series, w: Union[Window, int] = Window(None, 0)) -> pd.Series:
     """
     w = normalize_window(x, w)
     assert x.index.is_monotonic_increasing, "series index is monotonic increasing"
-    return apply_ramp(x.rolling(w.w, 0).apply(lambda y: stats.mode(y).mode, raw=True), w)
+    if isinstance(w.w, pd.DateOffset):
+        values = [stats.mode(x.loc[(x.index > idx - w.w) & (x.index <= idx)]).mode[0] for idx in x.index]
+        return apply_ramp(pd.Series(values, index=x.index, dtype=np.dtype(float)), w)
+    else:
+        return apply_ramp(x.rolling(w.w, 0).apply(lambda y: stats.mode(y).mode, raw=True), w)
 
 
 @plot_function
@@ -258,8 +280,8 @@ def sum_(x: pd.Series, w: Union[Window, int] = Window(None, 0)) -> pd.Series:
     Rolling sum of series over given window
 
     :param x: series: timeseries
-    :param w: Window or int: number of observations and ramp up to use. e.g. Window(22, 10) where 22 is the window size
-    and 10 the ramp up value. Window size defaults to length of series.
+    :param w: Window or int: size of window and ramp up to use. e.g. Window(22, 10) where 22 is the window size
+              and 10 the ramp up value. Window size defaults to length of series.
     :return: timeseries of rolling sum
 
     **Usage**
@@ -285,7 +307,11 @@ def sum_(x: pd.Series, w: Union[Window, int] = Window(None, 0)) -> pd.Series:
     """
     w = normalize_window(x, w)
     assert x.index.is_monotonic_increasing
-    return apply_ramp(x.rolling(w.w, 0).sum(), w)
+    if isinstance(w.w, pd.DateOffset):
+        values = [x.loc[(x.index > idx - w.w) & (x.index <= idx)].sum() for idx in x.index]
+        return apply_ramp(pd.Series(values, index=x.index, dtype=np.dtype(float)), w)
+    else:
+        return apply_ramp(x.rolling(w.w, 0).sum(), w)
 
 
 @plot_function
@@ -294,8 +320,8 @@ def product(x: pd.Series, w: Union[Window, int] = Window(None, 0)) -> pd.Series:
     Rolling product of series over given window
 
     :param x: series: timeseries
-    :param w: Window or int: number of observations and ramp up to use. e.g. Window(22, 10) where 22 is the window size
-    and 10 the ramp up value. Window size defaults to length of series.
+    :param w: Window or int: size of window and ramp up to use. e.g. Window(22, 10) where 22 is the window size
+              and 10 the ramp up value. Window size defaults to length of series.
     :return: timeseries of rolling product
 
     **Usage**
@@ -320,7 +346,11 @@ def product(x: pd.Series, w: Union[Window, int] = Window(None, 0)) -> pd.Series:
     """
     w = normalize_window(x, w)
     assert x.index.is_monotonic_increasing
-    return apply_ramp(x.rolling(w.w, 0).agg(pd.Series.prod), w)
+    if isinstance(w.w, pd.DateOffset):
+        values = [x.loc[(x.index > idx - w.w) & (x.index <= idx)].agg(pd.Series.prod) for idx in x.index]
+        return apply_ramp(pd.Series(values, index=x.index, dtype=np.dtype(float)), w)
+    else:
+        return apply_ramp(x.rolling(w.w, 0).agg(pd.Series.prod), w)
 
 
 @plot_function
@@ -329,8 +359,8 @@ def std(x: pd.Series, w: Union[Window, int] = Window(None, 0)) -> pd.Series:
     Rolling standard deviation of series over given window
 
     :param x: series: timeseries
-    :param w: Window or int: number of observations and ramp up to use. e.g. Window(22, 10) where 22 is the window size
-     and 10 the ramp up value. Window size defaults to length of series.
+    :param w: Window or int: size of window and ramp up to use. e.g. Window(22, 10) where 22 is the window size
+              and 10 the ramp up value. Window size defaults to length of series.
     :return: timeseries of standard deviation
 
     **Usage**
@@ -361,7 +391,11 @@ def std(x: pd.Series, w: Union[Window, int] = Window(None, 0)) -> pd.Series:
     """
     w = normalize_window(x, w)
     assert x.index.is_monotonic_increasing, "series index is monotonic increasing"
-    return apply_ramp(x.rolling(w.w, 0).std(), w)
+    if isinstance(w.w, pd.DateOffset):
+        values = [x.loc[(x.index > idx - w.w) & (x.index <= idx)].std() for idx in x.index]
+        return apply_ramp(pd.Series(values, index=x.index, dtype=np.dtype(float)), w)
+    else:
+        return apply_ramp(x.rolling(w.w, 0).std(), w)
 
 
 @plot_function
@@ -370,8 +404,8 @@ def var(x: pd.Series, w: Union[Window, int] = Window(None, 0)) -> pd.Series:
     Rolling variance of series over given window
 
     :param x: series: timeseries
-    :param w: Window or int: number of observations and ramp up to use. e.g. Window(22, 10) where 22 is the window size
-    and 10 the ramp up value. Window size defaults to length of series.
+    :param w: Window or int: size of window and ramp up to use. e.g. Window(22, 10) where 22 is the window size
+              and 10 the ramp up value. Window size defaults to length of series.
     :return: timeseries of variance
 
     **Usage**
@@ -402,7 +436,11 @@ def var(x: pd.Series, w: Union[Window, int] = Window(None, 0)) -> pd.Series:
     """
     w = normalize_window(x, w)
     assert x.index.is_monotonic_increasing, "series index is monotonic increasing"
-    return apply_ramp(x.rolling(w.w, 0).var(), w)
+    if isinstance(w.w, pd.DateOffset):
+        values = [x.loc[(x.index > idx - w.w) & (x.index <= idx)].var() for idx in x.index]
+        return apply_ramp(pd.Series(values, index=x.index, dtype=np.dtype(float)), w)
+    else:
+        return apply_ramp(x.rolling(w.w, 0).var(), w)
 
 
 @plot_function
@@ -412,8 +450,8 @@ def cov(x: pd.Series, y: pd.Series, w: Union[Window, int] = Window(None, 0)) -> 
 
     :param x: series: timeseries
     :param y: series: timeseries
-    :param w: Window or int: number of observations and ramp up to use. e.g. Window(22, 10) where 22 is the window size
-    and 10 the ramp up value. Window size defaults to length of series.
+    :param w: Window or int: size of window and ramp up to use. e.g. Window(22, 10) where 22 is the window size
+              and 10 the ramp up value. Window size defaults to length of series.
     :return: timeseries of covariance
 
     **Usage**
@@ -445,7 +483,11 @@ def cov(x: pd.Series, y: pd.Series, w: Union[Window, int] = Window(None, 0)) -> 
     """
     w = normalize_window(x, w)
     assert x.index.is_monotonic_increasing, "series index is monotonic increasing"
-    return apply_ramp(x.rolling(w.w, 0).cov(y), w)
+    if isinstance(w.w, pd.DateOffset):
+        values = [x.loc[(x.index > idx - w.w) & (x.index <= idx)].cov(y) for idx in x.index]
+        return apply_ramp(pd.Series(values, index=x.index, dtype=np.dtype(float)), w)
+    else:
+        return apply_ramp(x.rolling(w.w, 0).cov(y), w)
 
 
 def _zscore(x):
@@ -461,8 +503,8 @@ def zscores(x: pd.Series, w: Union[Window, int] = Window(None, 0)) -> pd.Series:
     Rolling z-scores over a given window
 
     :param x: time series of prices
-    :param w: Window or int: number of observations and ramp up to use. e.g. Window(22, 10) where 22 is the window size
-    and 10 the ramp up value. Window size defaults to length of series.
+    :param w: Window or int: size of window and ramp up to use. e.g. Window(22, 10) where 22 is the window size
+              and 10 the ramp up value. Window size defaults to length of series.
     :return: timeseries of z-scores
 
     **Usage**
@@ -492,15 +534,21 @@ def zscores(x: pd.Series, w: Union[Window, int] = Window(None, 0)) -> pd.Series:
     if x.size < 1:
         return x
 
+    if isinstance(w, int):
+        w = Window(w=w, r=w)
     if not w.w:
         if x.size == 1:
-            return pd.Series([0.0], index=x.index)
+            return pd.Series([0.0], index=x.index, dtype=np.dtype(float))
 
         clean_series = x.dropna()
-        zscore_series = pd.Series(stats.zscore(clean_series, ddof=1), clean_series.index)
+        zscore_series = pd.Series(stats.zscore(clean_series, ddof=1), clean_series.index, dtype=np.dtype(float))
         return interpolate(zscore_series, x, Interpolate.NAN)
-
-    return apply_ramp(x.rolling(w.w, 0).apply(_zscore, raw=False), w)
+    if not isinstance(w.w, int):
+        w = normalize_window(x, w)
+        values = [_zscore(x.loc[(x.index > idx - w.w) & (x.index <= idx)]) for idx in x.index]
+        return apply_ramp(pd.Series(values, index=x.index, dtype=np.dtype(float)), w)
+    else:
+        return apply_ramp(x.rolling(w.w, 0).apply(_zscore, raw=False), w)
 
 
 @plot_function
@@ -510,8 +558,8 @@ def winsorize(x: pd.Series, limit: float = 2.5, w: Union[Window, int] = Window(N
 
     :param x: time series of prices
     :param limit: max z-score of values
-    :param w: Window or int: number of observations and ramp up to use. e.g. Window(22, 10) where 22 is the window size
-    and 10 the ramp up value. Window size defaults to length of series.
+    :param w: Window or int: size of window and ramp up to use. e.g. Window(22, 10) where 22 is the window size
+              and 10 the ramp up value. Window size defaults to length of series.
     :return: timeseries of winsorized values
 
     **Usage**
@@ -603,7 +651,7 @@ def generate_series(length: int) -> pd.Series:
         levels.append(levels[i] * 1 + numpy.random.normal())
         dates.append(datetime.date.fromordinal(dates[i].toordinal() + 1))
 
-    return pd.Series(data=levels, index=dates)
+    return pd.Series(data=levels, index=dates, dtype=np.dtype(float))
 
 
 @plot_function
@@ -613,8 +661,8 @@ def percentiles(x: pd.Series, y: pd.Series = None, w: Union[Window, int] = Windo
 
     :param x: value series
     :param y: distribution series
-    :param w: Window or int: number of observations and ramp up to use. e.g. Window(22, 10) where 22 is the window size
-    and 10 the ramp up value. Window size defaults to length of series.
+    :param w: Window or int: size of window and ramp up to use. e.g. Window(22, 10) where 22 is the window size
+              and 10 the ramp up value. Window size defaults to length of series.
     :return: timeseries of percentiles
 
     **Usage**
@@ -648,9 +696,431 @@ def percentiles(x: pd.Series, y: pd.Series = None, w: Union[Window, int] = Windo
     if y is None:
         y = x.copy()
 
-    res = pd.Series()
+    res = pd.Series(dtype=np.dtype(float))
     for idx, val in y.iteritems():
-        sample = x[:idx][-w.w:]
+        sample = x.loc[(x.index > idx - w.w) & (x.index <= idx)] if isinstance(w.w, pd.DateOffset) else x[:idx][-w.w:]
         res.loc[idx] = percentileofscore(sample, val, kind='mean')
 
     return apply_ramp(res, w)
+
+
+@plot_function
+def percentile(x: pd.Series, n: float, w: Union[Window, int] = None) -> Union[pd.Series, float]:
+    """
+    Returns the nth percentile of a series.
+
+    :param x: series
+    :param n: percentile
+    :param w: Window or int: size of window and ramp up to use. e.g. Window(22, 10) where 22 is the window size
+              and 10 the ramp up value.
+    :return: nth percentile
+
+    **Usage**
+
+    Calculates the `nth percentile rank <https://en.wikipedia.org/wiki/Percentile_rank>`_ of :math:`x`. Rolling nth
+    percentile is returned if a window is specified, else a scalar for nth percentile over the entire series.
+
+    **Example**
+
+    Compute the 90th percentile of a series.
+
+    >>> a = generate_series(100)
+    >>> percentile(a, 90)
+
+    """
+    if not 0 <= n <= 100:
+        raise MqValueError('percentile must be in range [0, 100]')
+    if w is None:
+        return scoreatpercentile(x.values, n)
+
+    w = normalize_window(x, w)
+    res = x.rolling(w.w, 0).quantile(n / 100)
+    return apply_ramp(res, w)
+
+
+class LinearRegression:
+
+    """Ordinary least squares (OLS) Linear Regression"""
+
+    def __init__(self, X: Union[pd.Series, List[pd.Series]], y: pd.Series, fit_intercept: bool = True):
+        df = pd.concat(X, axis=1) if isinstance(X, list) else X.to_frame()
+        df = sm.add_constant(df) if fit_intercept else df
+        self._index_scope = range(0, len(df.columns)) if fit_intercept else range(1, len(df.columns) + 1)
+        self._res = sm.OLS(y, df).fit()
+        self._fit_intercept = fit_intercept
+
+    def _convert_index(self, i: int):
+        if i not in self._index_scope:
+            raise ValueError('index {} out of range'.format(i))
+        return 'const' if i == 0 else i - 1
+
+    @plot_method
+    def coefficient(self, i: int) -> float:
+        """
+        Estimated coefficient
+        :param i: coefficient of which predictor to get. If intercept is used, start from 0, else start from 1
+        :return: estimated coefficient of the i-th predictor
+        """
+        converted_i = self._convert_index(i)
+        return self._res.params[converted_i]
+
+    @plot_method
+    def r_squared(self) -> float:
+        """
+        Coefficient of determination (R Squared)
+        :return: R Squared
+        """
+        return self._res.rsquared
+
+    @plot_method
+    def fitted_values(self):
+        """
+        Fitted values
+        :return: fitted values
+        """
+        return self._res.fittedvalues
+
+    @plot_method
+    def predict(self, X_predict: Union[pd.Series, List[pd.Series]]) -> pd.Series:
+        """
+        :param X_predict: the values for which to predict
+        :return: predicted values
+        """
+        df = pd.concat(X_predict, axis=1) if isinstance(X_predict, list) else X_predict.to_frame()
+        return self._res.predict(sm.add_constant(df) if self._fit_intercept else df)
+
+
+class SIRModel:
+
+    """SIR Compartmental model for transmission of infectious disease
+
+    :param beta: transmission rate of the infection
+    :param gamma: recovery rate of the infection
+    :param s: number of susceptible individuals in population
+    :param i: number of infectious individuals in population
+    :param r: number of recovered individuals in population
+    :param n: total population size
+    :param end_date: end date for the evolution of the model
+    :param fit: whether to fit the model to the data
+    :param fit_period: on how many days back to fit the model
+
+    **Usage**
+
+    Fit `SIR Model <https://en.wikipedia.org/wiki/Compartmental_models_in_epidemiology#The_SIR_model>`_ based on the
+    population in each compartment over a given time period.
+
+    The SIR models the movement of individuals between three compartments: susceptible (S), infected (I), and resistant
+    (R). The model calibrates parameters :
+
+    ===========   =======================================================
+    Parameter     Description
+    ===========   =======================================================
+    S0            initial susceptible individuals
+    I0            initial infected individuals
+    R0            initial recovered individuals
+    beta          Transmission rate from susceptible to infected
+    gamma         Immunity rate from infected to resistant
+    ===========   =======================================================
+
+    The parameters beta and gamma model how fast people move from being susceptible to infected (beta), and
+    subsequently from infected to resistant (gamma). This model can be used to forecast the populations of each
+    compartment once calibrated
+
+    """
+    def __init__(self, beta: float = None, gamma: float = None, s: Union[pd.Series, float] = None,
+                 i: Union[pd.Series, float] = None, r: Union[pd.Series, float] = None,
+                 n: Union[pd.Series, float] = None, fit: bool = True,
+                 fit_period: int = None):
+        n = n.dropna()[0] if isinstance(n, pd.Series) else n
+        n = 100 if n is None else n
+        fit = False if s is None and i is None and r is None else fit
+        s = n if s is None else s
+        i = 1 if i is None else i
+        r = 0 if r is None else r
+
+        data_start = [ts.index.min().date() for ts in [s, i, r] if isinstance(ts, pd.Series)]
+        data_start.append(DataContext.current.start_date)
+        start_date = max(data_start)
+
+        data_end = [ts.index.max().date() for ts in [s, i, r] if isinstance(ts, pd.Series)]
+        data_end.append(DataContext.current.end_date)
+        end_date = max(data_end)
+
+        self.s = s if isinstance(s, pd.Series) else [s]
+        self.i = i if isinstance(i, pd.Series) else [i]
+        self.r = r if isinstance(r, pd.Series) else [r]
+        self.n = n
+        self.beta_init = beta
+        self.gamma_init = gamma
+        self.fit = fit
+        self.fit_period = fit_period
+        self.beta_fixed = not (self.fit or (self.beta_init is None))
+        self.gamma_fixed = not (self.fit or (self.gamma_init is None))
+
+        data = np.array([self.s, self.i, self.r]).T
+
+        beta_init = self.beta_init if self.beta_init is not None else 0.9
+        gamma_init = self.gamma_init if self.gamma_init is not None else 0.01
+
+        parameters, initial_conditions = SIR.get_parameters(self.s[0], self.i[0], self.r[0], n, beta=beta_init,
+                                                            gamma=gamma_init, beta_fixed=self.beta_fixed,
+                                                            gamma_fixed=self.gamma_fixed, S0_fixed=True, I0_fixed=True,
+                                                            R0_fixed=True)
+        self.parameters = parameters
+
+        self._model = EpidemicModel(SIR, parameters=parameters, data=data, initial_conditions=initial_conditions,
+                                    fit_period=self.fit_period)
+        if self.fit:
+            self._model.fit(verbose=False)
+
+        t = np.arange((end_date - start_date).days + 1)
+        predict = self._model.solve(t, (self.s0(), self.i0(), self.r0()), (self.beta(), self.gamma(), n))
+
+        predict_dates = pd.date_range(start_date, end_date)
+
+        self._model.s_predict = pd.Series(predict[:, 0], predict_dates)
+        self._model.i_predict = pd.Series(predict[:, 1], predict_dates)
+        self._model.r_predict = pd.Series(predict[:, 2], predict_dates)
+
+    @plot_method
+    def s0(self) -> float:
+        """
+        Model calibration for initial susceptible individuals
+
+        :return: initial susceptible individuals
+        """
+        if self.fit:
+            return self._model.fitted_parameters['S0']
+        return self.parameters['S0'].value
+
+    @plot_method
+    def i0(self) -> float:
+        """
+        Model calibration for initial infectious individuals
+
+        :return: initial infectious individuals
+        """
+        if self.fit:
+            return self._model.fitted_parameters['I0']
+        return self.parameters['I0'].value
+
+    @plot_method
+    def r0(self) -> float:
+        """
+        Model calibration for initial recovered individuals
+
+        :return: initial recovered individuals
+        """
+        if self.fit:
+            return self._model.fitted_parameters['R0']
+        return self.parameters['R0'].value
+
+    @plot_method
+    def beta(self) -> float:
+        """
+        Model calibration for transmission rate (susceptible to infected)
+
+        :return: beta
+        """
+        if self.fit:
+            return self._model.fitted_parameters['beta']
+        return self.parameters['beta'].value
+
+    @plot_method
+    def gamma(self) -> float:
+        """
+        Model calibration for immunity (infected to resistant)
+
+        :return: beta
+        """
+        if self.fit:
+            return self._model.fitted_parameters['gamma']
+        return self.parameters['gamma'].value
+
+    @plot_method
+    def predict_s(self) -> pd.Series:
+        """
+        Model calibration for susceptible individuals through time
+
+        :return: susceptible predict
+        """
+        return self._model.s_predict
+
+    @plot_method
+    def predict_i(self) -> pd.Series:
+        """
+        Model calibration for infected individuals through time
+
+        :return: infected predict
+        """
+        return self._model.i_predict
+
+    @plot_method
+    def predict_r(self) -> pd.Series:
+        """
+        Model calibration for recovered individuals through time
+
+        :return: infected predict
+        """
+        return self._model.r_predict
+
+
+class SEIRModel(SIRModel):
+
+    """SEIR Compartmental model for transmission of infectious disease
+
+    :param beta: transmission rate of the infection
+    :param gamma: recovery rate of the infection
+    :param sigma: immunity rate from exposed to infected
+    :param s: number of susceptible individuals in population
+    :param e: number of exposed individuals in population
+    :param i: number of infectious individuals in population
+    :param r: number of recovered individuals in population
+    :param n: total population size
+    :param end_date: end date for the evolution of the model
+    :param fit: whether to fit the model to the data
+    :param fit_period: on how many days back to fit the model
+
+    **Usage**
+
+    Fit `SEIR Model <https://en.wikipedia.org/wiki/Compartmental_models_in_epidemiology#The_SEIR_model>`_ based on the
+    population in each compartment over a given time period.
+
+    The SEIR models the movement of individuals between four compartments: susceptible (S), exposed (E), infected (I),
+    and resistant (R). The model calibrates parameters :
+
+    ===========   =======================================================
+    Parameter     Description
+    ===========   =======================================================
+    S0            initial susceptible individuals
+    E0            initial exposed individuals
+    I0            initial infected individuals
+    R0            initial recovered individuals
+    beta          Transmission rate from susceptible to exposed
+    gamma         Immunity rate from infected to resistant
+    sigma         Immunity rate from exposed to infected
+    ===========   =======================================================
+
+    The parameters beta, gamma, and sigma, model how fast people move from being susceptible to exposed (beta),
+    from exposed to infected (sigma), and subsequently from infected to resistant (gamma). This model can be used to
+    predict the populations of each compartment once calibrated.
+
+    """
+    def __init__(self, beta: float = None, gamma: float = None, sigma: float = None, s: Union[pd.Series, float] = None,
+                 e: Union[pd.Series, float] = None, i: Union[pd.Series, float] = None,
+                 r: Union[pd.Series, float] = None, n: Union[pd.Series, float] = None,
+                 fit: bool = True, fit_period: int = None):
+        n = n.dropna()[0] if isinstance(n, pd.Series) else n
+        n = 100 if n is None else n
+        fit = False if all(state is None for state in (s, e, i, r)) else fit
+        s = n if s is None else s
+        e = 1 if e is None else e
+        i = 1 if i is None else i
+        r = 0 if r is None else r
+
+        data_start = [ts.index.min().date() for ts in [s, i, r] if isinstance(ts, pd.Series)]
+        data_start.append(DataContext.current.start_date)
+        start_date = max(data_start)
+
+        data_end = [ts.index.max().date() for ts in [s, i, r] if isinstance(ts, pd.Series)]
+        data_end.append(DataContext.current.end_date)
+        end_date = max(data_end)
+
+        self.s = s if isinstance(s, pd.Series) else [s]
+        self.e = e if isinstance(e, pd.Series) else [e]
+        self.i = i if isinstance(i, pd.Series) else [i]
+        self.r = r if isinstance(r, pd.Series) else [r]
+        self.n = n
+        self.beta_init = beta
+        self.gamma_init = gamma
+        self.sigma_init = sigma
+        self.fit = fit
+        self.fit_period = fit_period
+        self.beta_fixed = not (self.fit or (self.beta is None))
+        self.gamma_fixed = not (self.fit or (self.gamma is None))
+        self.sigma_fixed = not (self.fit or (self.sigma is None))
+
+        data = np.array([self.s, self.e, self.i, self.r]).T
+
+        beta_init = self.beta_init if self.beta_init is not None else 0.9
+        gamma_init = self.gamma_init if self.gamma_init is not None else 0.01
+        sigma_init = self.sigma_init if self.sigma_init is not None else 0.2
+
+        parameters, initial_conditions = SEIR.get_parameters(self.s[0], self.e[0], self.i[0], self.r[0], n,
+                                                             beta=beta_init, gamma=gamma_init, sigma=sigma_init,
+                                                             beta_fixed=self.beta_fixed,
+                                                             gamma_fixed=self.gamma_fixed,
+                                                             sigma_fixed=self.sigma_fixed,
+                                                             S0_fixed=True, I0_fixed=True,
+                                                             R0_fixed=True, E0_fixed=True, S0_max=5e6, I0_max=5e6,
+                                                             E0_max=10e6, R0_max=10e6)
+        self.parameters = parameters
+
+        self._model = EpidemicModel(SEIR, parameters=parameters, data=data, initial_conditions=initial_conditions,
+                                    fit_period=self.fit_period)
+        if self.fit:
+            self._model.fit(verbose=False)
+
+        t = np.arange((end_date - start_date).days + 1)
+        predict = self._model.solve(t, (self.s0(), self.e0(), self.i0(), self.r0()),
+                                    (self.beta(), self.gamma(), self.sigma(), n))
+
+        predict_dates = pd.date_range(start_date, end_date)
+
+        self._model.s_predict = pd.Series(predict[:, 0], predict_dates)
+        self._model.e_predict = pd.Series(predict[:, 1], predict_dates)
+        self._model.i_predict = pd.Series(predict[:, 2], predict_dates)
+        self._model.r_predict = pd.Series(predict[:, 3], predict_dates)
+
+    @plot_method
+    def e0(self) -> float:
+        """
+        Model calibration for initial exposed individuals
+
+        :return: initial exposed individuals
+        """
+        if self.fit:
+            return self._model.fitted_parameters['E0']
+        return self.parameters['E0'].value
+
+    @plot_method
+    def beta(self) -> float:
+        """
+        Model calibration for transmission rate (susceptible to exposed)
+
+        :return: beta
+        """
+        if self.fit:
+            return self._model.fitted_parameters['beta']
+        return self.parameters['beta'].value
+
+    @plot_method
+    def gamma(self) -> float:
+        """
+        Model calibration for immunity (infected to resistant)
+
+        :return: gamma
+        """
+        if self.fit:
+            return self._model.fitted_parameters['gamma']
+        return self.parameters['gamma'].value
+
+    @plot_method
+    def sigma(self) -> float:
+        """
+        Model calibration for infection rate (exposed to infected)
+
+        :return: sigma
+        """
+        if self.fit:
+            return self._model.fitted_parameters['sigma']
+        return self.parameters['sigma'].value
+
+    @plot_method
+    def predict_e(self) -> pd.Series:
+        """
+        Model calibration for exposed individuals through time
+
+        :return: exposed predict
+        """
+        return self._model.e_predict

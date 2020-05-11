@@ -24,6 +24,7 @@ from gs_quant.context_base import ContextMeta
 from gs_quant.errors import MqValueError
 from gs_quant.markets import MarketDataCoordinate
 from gs_quant.session import GsSession, Environment
+from gs_quant.target.data import MDAPIDataQuery, MarketDataVendor, DataSetEntity
 
 test_coordinates = (
     MarketDataCoordinate(mkt_type='Prime', mkt_quoting_style='price', mkt_asset='335320934'),
@@ -34,6 +35,41 @@ test_str_coordinates = (
     'Prime_335320934_.price',
     'IR_USD_Swap_2Y'
 )
+
+test_defn_dict = {'id': 'EXAMPLE_FROM_SLANG',
+                  'name': 'Example DataSet',
+                  'description': 'This is a test.',
+                  'shortDescription': '',
+                  'vendor': 'Goldman Sachs',
+                  'dataProduct': 'TEST',
+                  'entitlements': {'query': ['internal'],
+                                   'view': ['internal', 'role:DataServiceView', 'role:DataServiceAdmin'],
+                                   'upload': ['internal'],
+                                   'admin': ['internal', 'role:DataServiceAdmin'],
+                                   'edit': ['internal', 'role:DataServiceAdmin']},
+                  'parameters': {'methodology': '',
+                                 'coverage': '',
+                                 'notes': '',
+                                 'history': '',
+                                 'frequency': '',
+                                 'applyMarketDataEntitlements': False,
+                                 'uploadDataPolicy': 'DEFAULT_POLICY',
+                                 'logicalDb': 'STUDIO_DAILY',
+                                 'symbolStrategy': 'ARCTIC_LINK',
+                                 'immutable': False,
+                                 'includeInCatalog': False,
+                                 'coverageEnabled': True},
+                  'dimensions': {'timeField': 'date',
+                                 'transactionTimeField': 'updateTime',
+                                 'symbolDimensions': ['assetId'],
+                                 'nonSymbolDimensions': [{'field': 'price', 'column': 'PRICE'}],
+                                 'measures': [{'field': 'updateTime', 'column': 'UPDATE_TIME'}],
+                                 'entityDimension': 'assetId'},
+                  'defaults': {'startSeconds': 2592000.0},
+                  'createdById': '9eb7226166a44236905cae2913cfbd3c',
+                  'createdTime': '2018-07-24T00:32:25.77Z',
+                  'lastUpdatedById': '4ad8ebb6480d49e6b2e9eea9210685cf',
+                  'lastUpdatedTime': '2019-10-24T14:20:13.653Z'}
 
 bond_data = [
     {
@@ -90,8 +126,10 @@ swap_expected_frame = pd.DataFrame(
 
 
 def test_coordinates_data(mocker):
+    start = dt.datetime(2019, 1, 2, 1, 0)
+    end = dt.datetime(2019, 1, 2, 1, 10)
     # mock GsSession and data response
-    mocker.patch.object(GsSession.__class__, 'current',
+    mocker.patch.object(GsSession.__class__, 'default_value',
                         return_value=GsSession.get(Environment.QA, 'client_id', 'secret'))
     mocker.patch.object(GsSession.current, '_post', side_effect=[{'responses': [{'data': bond_data}]},
                                                                  {'responses': [{'data': swap_data}]},
@@ -101,35 +139,38 @@ def test_coordinates_data(mocker):
                                                                                 {'data': swap_data}]}
                                                                  ])
 
-    coord_data_result = GsDataApi.coordinates_data(coordinates=test_coordinates[0], start=dt.datetime(2019, 1, 2, 1, 0),
-                                                   end=dt.datetime(2019, 1, 2, 1, 10))
+    coord_data_result = GsDataApi.coordinates_data(coordinates=test_coordinates[0], start=start, end=end)
     assert_frame_equal(coord_data_result, bond_expected_frame)
 
-    str_coord_data_result = GsDataApi.coordinates_data(coordinates=test_str_coordinates[1],
-                                                       start=dt.datetime(2019, 1, 2, 1, 0),
-                                                       end=dt.datetime(2019, 1, 2, 1, 10))
+    str_coord_data_result = GsDataApi.coordinates_data(coordinates=test_str_coordinates[1], start=start, end=end)
     assert_frame_equal(str_coord_data_result, swap_expected_frame)
 
-    coords_data_result = GsDataApi.coordinates_data(coordinates=test_coordinates, start=dt.datetime(2019, 1, 2, 1, 0),
-                                                    end=dt.datetime(2019, 1, 2, 1, 10), as_multiple_dataframes=True)
+    coords_data_result = GsDataApi.coordinates_data(coordinates=test_coordinates, start=start, end=end,
+                                                    as_multiple_dataframes=True)
     assert len(coords_data_result) == 2
     assert_frame_equal(coords_data_result[0], bond_expected_frame)
     assert_frame_equal(coords_data_result[1], swap_expected_frame)
 
-    str_coords_data_result = GsDataApi.coordinates_data(coordinates=test_str_coordinates,
-                                                        start=dt.datetime(2019, 1, 2, 1, 0),
-                                                        end=dt.datetime(2019, 1, 2, 1, 10), as_multiple_dataframes=True)
+    GsSession.current._post.reset_mock()
+    str_coords_data_result = GsDataApi.coordinates_data(coordinates=test_str_coordinates, start=start, end=end,
+                                                        as_multiple_dataframes=True)
     assert len(str_coords_data_result) == 2
     assert_frame_equal(str_coords_data_result[0], bond_expected_frame)
     assert_frame_equal(str_coords_data_result[1], swap_expected_frame)
-
-    GsSession.current._post.assert_called_with('/data/coordinates/query', payload=mocker.ANY)
-    assert GsSession.current._post.call_count == 4
+    GsSession.current._post.assert_called_once_with('/data/coordinates/query',
+                                                    payload=MDAPIDataQuery(market_data_coordinates=test_coordinates,
+                                                                           start_time=start,
+                                                                           end_time=end,
+                                                                           vendor=MarketDataVendor.Goldman_Sachs,
+                                                                           format="MessagePack")
+                                                    )
 
 
 def test_coordinate_data_series(mocker):
+    start = dt.datetime(2019, 1, 2, 1, 0)
+    end = dt.datetime(2019, 1, 2, 1, 10)
     # mock GsSession and data response
-    mocker.patch.object(GsSession.__class__, 'current',
+    mocker.patch.object(GsSession.__class__, 'default_value',
                         return_value=GsSession.get(Environment.QA, 'client_id', 'secret'))
     mocker.patch.object(GsSession.current, '_post', side_effect=[{'responses': [{'data': bond_data}]},
                                                                  {'responses': [{'data': swap_data}]},
@@ -142,35 +183,33 @@ def test_coordinate_data_series(mocker):
     bond_expected_series = pd.Series(index=bond_expected_frame.index, data=bond_expected_frame.value.values)
     swap_expected_series = pd.Series(index=swap_expected_frame.index, data=swap_expected_frame.value.values)
 
-    coord_data_result = GsDataApi.coordinates_data_series(coordinates=test_coordinates[0],
-                                                          start=dt.datetime(2019, 1, 2, 1, 0),
-                                                          end=dt.datetime(2019, 1, 2, 1, 10))
+    coord_data_result = GsDataApi.coordinates_data_series(coordinates=test_coordinates[0], start=start, end=end)
     assert_series_equal(coord_data_result, bond_expected_series)
 
-    str_coord_data_result = GsDataApi.coordinates_data_series(coordinates=test_str_coordinates[1],
-                                                              start=dt.datetime(2019, 1, 2, 1, 0),
-                                                              end=dt.datetime(2019, 1, 2, 1, 10))
+    str_coord_data_result = GsDataApi.coordinates_data_series(coordinates=test_str_coordinates[1], start=start, end=end)
     assert_series_equal(str_coord_data_result, swap_expected_series)
 
-    coords_data_result = GsDataApi.coordinates_data_series(coordinates=test_coordinates,
-                                                           start=dt.datetime(2019, 1, 2, 1, 0),
-                                                           end=dt.datetime(2019, 1, 2, 1, 10))
+    coords_data_result = GsDataApi.coordinates_data_series(coordinates=test_coordinates, start=start, end=end)
     assert len(coords_data_result) == 2
     assert_series_equal(coords_data_result[0], bond_expected_series)
     assert_series_equal(coords_data_result[1], swap_expected_series)
 
-    str_coords_data_result = GsDataApi.coordinates_data_series(coordinates=test_str_coordinates,
-                                                               start=dt.datetime(2019, 1, 2, 1, 0),
-                                                               end=dt.datetime(2019, 1, 2, 1, 10))
+    GsSession.current._post.reset_mock()
+    str_coords_data_result = GsDataApi.coordinates_data_series(coordinates=test_str_coordinates, start=start, end=end)
     assert len(str_coords_data_result) == 2
     assert_series_equal(str_coords_data_result[0], bond_expected_series)
     assert_series_equal(str_coords_data_result[1], swap_expected_series)
-
-    GsSession.current._post.assert_called_with('/data/coordinates/query', payload=mocker.ANY)
-    assert GsSession.current._post.call_count == 4
+    GsSession.current._post.assert_called_with('/data/coordinates/query',
+                                               payload=MDAPIDataQuery(market_data_coordinates=test_coordinates,
+                                                                      start_time=start,
+                                                                      end_time=end,
+                                                                      vendor=MarketDataVendor.Goldman_Sachs,
+                                                                      format="MessagePack")
+                                               )
 
 
 def test_coordinate_last(mocker):
+    as_of = dt.datetime(2019, 1, 2, 1, 10)
     data = {'responses': [
         {'data': [
             {
@@ -206,20 +245,22 @@ def test_coordinate_last(mocker):
     )
 
     # mock GsSession and data response
-    mocker.patch.object(GsSession.__class__, 'current',
+    mocker.patch.object(GsSession.__class__, 'default_value',
                         return_value=GsSession.get(Environment.QA, 'client_id', 'secret'))
     GsSession.current._post = mocker.Mock(return_value=data)
 
-    result = GsDataApi.coordinates_last(coordinates=test_coordinates, as_of=dt.datetime(2019, 1, 2, 1, 10),
-                                        as_dataframe=True)
+    result = GsDataApi.coordinates_last(coordinates=test_coordinates, as_of=as_of, as_dataframe=True)
     assert result.equals(expected_result)
 
-    result_from_str = GsDataApi.coordinates_last(coordinates=test_str_coordinates, as_of=dt.datetime(2019, 1, 2, 1, 10),
-                                                 as_dataframe=True)
+    GsSession.current._post.reset_mock()
+    result_from_str = GsDataApi.coordinates_last(coordinates=test_str_coordinates, as_of=as_of, as_dataframe=True)
     assert result_from_str.equals(expected_result)
-
-    GsSession.current._post.assert_called_with('/data/coordinates/query/last', payload=mocker.ANY)
-    assert GsSession.current._post.call_count == 2
+    GsSession.current._post.assert_called_once_with('/data/coordinates/query/last',
+                                                    payload=MDAPIDataQuery(market_data_coordinates=test_coordinates,
+                                                                           end_time=as_of,
+                                                                           vendor=MarketDataVendor.Goldman_Sachs,
+                                                                           format="MessagePack")
+                                                    )
 
 
 def test_get_coverage_api(mocker):
@@ -230,6 +271,23 @@ def test_get_coverage_api(mocker):
     data = GsDataApi.get_coverage('MA_RANK')
 
     assert [{'gsid': 'gsid1'}] == data
+
+
+def test_get_many_defns_api(mocker):
+    test_defn = DataSetEntity.from_dict(test_defn_dict)
+    mock_response = {'results': (test_defn,), 'totalResults': 1}
+
+    expected_response = (test_defn,)
+
+    # mock GsSession
+    mocker.patch.object(GsSession.__class__, 'default_value',
+                        return_value=GsSession.get(Environment.QA, 'client_id', 'secret'))
+    mocker.patch.object(GsSession.current, '_get', return_value=mock_response)
+
+    # run test
+    response = GsDataApi.get_many_definitions()
+    GsSession.current._get.assert_called_with('/data/datasets?limit=100', cls=DataSetEntity)
+    assert response == expected_response
 
 
 def test_coordinates_converter():

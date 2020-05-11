@@ -13,19 +13,21 @@ KIND, either express or implied.  See the License for the
 specific language governing permissions and limitations
 under the License.
 """
+from abc import ABCMeta
 import builtins
-from concurrent.futures import Future
+from collections import namedtuple
 import copy
 import datetime as dt
 import dateutil
 from enum import EnumMeta
+from functools import wraps
 import inflection
 from inspect import signature, Parameter
 import keyword
 import logging
-import pandas as pd
-from typing import Mapping, Optional, Tuple, Union, get_type_hints
+from typing import Union, get_type_hints
 
+from gs_quant.context_base import ContextBase, ContextMeta
 
 _logger = logging.getLogger(__name__)
 
@@ -37,16 +39,9 @@ def _normalise_arg(arg: str) -> str:
         return arg
 
 
-class EnumBase:
-
-    @classmethod
-    def _missing_(cls: EnumMeta, key):
-        return next((m for m in cls.__members__.values() if m.value.lower() == key.lower()), None)
-
-
-class BaseMeta(type):
-
-    def __call__(cls, *args, **kwargs):
+def camel_case_translate(f):
+    @wraps(f)
+    def wrapper(*args, **kwargs):
         normalised_kwargs = {}
         for arg, value in kwargs.items():
             arg = _normalise_arg(arg)
@@ -63,19 +58,59 @@ class BaseMeta(type):
             else:
                 normalised_kwargs[arg] = value
 
-        obj = cls.__new__(cls, *args, **normalised_kwargs)
-        obj.__init__(*args, **normalised_kwargs)
-        return obj
+        return f(*args, **normalised_kwargs)
+
+    return wrapper
 
 
-class Base(metaclass=BaseMeta):
+class PricingKey(
+    namedtuple('_PricingKey', ('pricing_market_data_as_of', 'market_data_location', 'parameters', 'scenario'))
+):
+
+    def __iter__(self):
+        if len(self.pricing_market_data_as_of) > 1:
+            return iter(self.clone(pricing_market_data_as_of=(as_of,)) for as_of in self.pricing_market_data_as_of)
+        else:
+            return iter([self])
+
+    def __len__(self):
+        return len(self.pricing_market_data_as_of)
+
+    def clone(self, **kwargs):
+        dict = {f: getattr(self, f, None) for f in super()._fields}
+        dict.update(kwargs)
+        return PricingKey(**dict)
+
+    def for_pricing_date(self, pricing_date: dt.date):
+        as_of = next((a for a in self.pricing_market_data_as_of if a.pricing_date == pricing_date), None)
+        if as_of is None:
+            raise ValueError('{} not found'.format(pricing_date))
+
+        return self.clone(pricing_market_data_as_of=(as_of,))
+
+
+
+class EnumBase:
+
+    @classmethod
+    def _missing_(cls: EnumMeta, key):
+        return next((m for m in cls.__members__.values() if m.value.lower() == key.lower()), None)
+
+
+class Base(metaclass=ABCMeta):
 
     """The base class for all generated classes"""
 
     __properties = set()
 
-    def __init__(self):
+    def __init__(self, **_kwargs):
         self.__calced_hash: int = None
+
+        try:
+            self.name: str = None
+        except AttributeError:
+            # Regrettably, read-only properties called name exist
+            pass
 
     def __getattr__(self, item):
         snake_case_item = inflection.underscore(item)
@@ -95,15 +130,23 @@ class Base(metaclass=BaseMeta):
         else:
             return super().__setattr__(key, value)
 
+    def __repr__(self):
+        if self.name is not None:
+            return '{} ({})'.format(self.name, self.__class__.__name__)
+
+        return super().__repr__()
+
     def _property_changed(self, prop: str):
         self.__calced_hash = None
 
+    @property
+    def _hash_is_calced(self) -> bool:
+        return self.__calced_hash is not None
+
     def __hash__(self) -> int:
-        if self.__calced_hash is None:
-            properties = iter(self.properties())
-            prop = next(properties, None)
-            calced_hash = hash(super().__getattribute__(prop)) if prop else 1
-            for prop in properties:
+        if not self._hash_is_calced:
+            calced_hash = hash(self.name)
+            for prop in self.properties():
                 calced_hash ^= hash(super().__getattribute__(prop))
 
             self.__calced_hash = calced_hash
@@ -112,9 +155,10 @@ class Base(metaclass=BaseMeta):
 
     def __eq__(self, other) -> bool:
         return\
-            type(self) == type(other) and\
-            (self.__calced_hash is None or other.__calced_hash is None or self.__calced_hash == other.__calced_hash) and\
-            all(super(Base, self).__getattribute__(p) == super(Base, other).__getattribute__(p) for p in self.properties())
+            type(self) == type(other) and self.name == other.name and\
+            (self.__calced_hash is None or other.__calced_hash is None or self.__calced_hash == other.__calced_hash) \
+            and all(super(Base, self).__getattribute__(p) == super(Base, other).__getattribute__(p)
+                    for p in self.properties())
 
     def __ne__(self, other) -> bool:
         return not self.__eq__(other)
@@ -148,13 +192,16 @@ class Base(metaclass=BaseMeta):
     def properties(cls) -> set:
         """The public property names of this class"""
         if not cls.__properties:
-            cls.__properties = set(i for i in dir(cls) if isinstance(getattr(cls, i), property) and not i.startswith('_'))
+            cls.__properties = set(i for i in dir(cls) if isinstance(getattr(cls, i), property)
+                                   and not i.startswith('_') and not
+                                   getattr(getattr(cls, i).fget, 'do_not_serialise', False))
         return cls.__properties
 
     def as_dict(self, as_camel_case: bool=False) -> dict:
         """Dictionary of the public, non-null properties and values"""
         raw_properties = self.properties()
-        properties = (inflection.camelize(p, uppercase_first_letter=False) for p in raw_properties) if as_camel_case else raw_properties
+        properties = (inflection.camelize(p, uppercase_first_letter=False) for p in raw_properties) \
+            if as_camel_case else raw_properties
         values = (super(Base, self).__getattribute__(p) for p in raw_properties)
         return dict((p, v) for p, v in zip(properties, values) if v is not None)
 
@@ -169,15 +216,29 @@ class Base(metaclass=BaseMeta):
         if prop_type == Union:
             prop_type = next((a for a in return_hints.__args__ if issubclass(a, (Base, EnumBase))), None)
 
+        if prop_type is InstrumentBase:
+            # TODO Fix this
+            from .instrument import Instrument
+            prop_type = Instrument
+
         return prop_type
 
     @classmethod
     def prop_item_type(cls, prop: str) -> type:
         return_hints = get_type_hints(getattr(cls, prop).fget).get('return')
-        return return_hints.__args__[0]
+        item_type = return_hints.__args__[0]
+
+        item_args = [i for i in getattr(item_type, '__args__', ()) if isinstance(i, type)]
+        if item_args:
+            item_type = next((a for a in item_args if issubclass(a, (Base, EnumBase))), item_args[-1])
+
+        return item_type
 
     def __from_dict(self, values: dict):
         for prop in self.properties():
+            if getattr(type(self), prop).fset is None:
+                continue
+
             prop_value = values.get(prop, values.get(inflection.camelize(prop, uppercase_first_letter=False)))
 
             if prop_value is not None:
@@ -208,12 +269,9 @@ class Base(metaclass=BaseMeta):
                         setattr(self, prop, prop_type.from_dict(prop_value))
                 elif issubclass(prop_type, (list, tuple)):
                     item_type = self.prop_item_type(prop)
-                    item_args = [i for i in getattr(item_type, '__args__', ()) if isinstance(i, type)]
-                    if item_args:
-                        item_type = next((a for a in item_args if issubclass(a, (Base, EnumBase))), item_args[-1])
-
                     if issubclass(item_type, Base):
-                        item_values = tuple(v if isinstance(v, (Base, EnumBase)) else item_type.from_dict(v) for v in prop_value)
+                        item_values = tuple(v if isinstance(v, (Base, EnumBase)) else item_type.from_dict(v)
+                                            for v in prop_value)
                     elif issubclass(item_type, EnumBase):
                         item_values = tuple(get_enum_value(item_type, v) for v in prop_value)
                     else:
@@ -224,7 +282,8 @@ class Base(metaclass=BaseMeta):
 
     @classmethod
     def _from_dict(cls, values: dict) -> 'Base':
-        args = [k for k, v in signature(cls.__init__).parameters.items() if k != 'kwargs' and v.default == Parameter.empty][1:]
+        args = [k for k, v in signature(cls.__init__).parameters.items() if k not in ('kwargs', '_kwargs')
+                and v.default == Parameter.empty][1:]
         required = {}
 
         for arg in args:
@@ -233,9 +292,12 @@ class Base(metaclass=BaseMeta):
             value = values.pop(arg, None)
 
             if prop_type:
-                if issubclass(prop_type, Base):
-                    if isinstance(value, dict):
+                if issubclass(prop_type, Base) and isinstance(value, dict):
                         value = prop_type.from_dict(value)
+                elif issubclass(prop_type, (list, tuple)) and isinstance(value, (list, tuple)):
+                    item_type = cls.prop_item_type(prop_name)
+                    if issubclass(item_type, Base):
+                        value = tuple(v if isinstance(v, (Base, EnumBase)) else item_type.from_dict(v) for v in value)
                 elif issubclass(prop_type, EnumBase):
                     value = get_enum_value(prop_type, value)
 
@@ -246,7 +308,7 @@ class Base(metaclass=BaseMeta):
         return instance
 
     @classmethod
-    def from_dict(cls, values: dict) -> 'Base':
+    def from_dict(cls, values: dict):
         """
         Construct an instance of this type from a dictionary
 
@@ -256,7 +318,7 @@ class Base(metaclass=BaseMeta):
         return cls._from_dict(values)
 
     @classmethod
-    def default_instance(cls) -> 'Base':
+    def default_instance(cls):
         """
         Construct a default instance of this type
         """
@@ -264,56 +326,42 @@ class Base(metaclass=BaseMeta):
         required = {a: None for a in args}
         return cls(**required)
 
+    def from_instance(self, instance):
+        """
+        Copy the values from an existing instance of the same type to our self
+        :param instance: from which to copy:
+        :return:
+        """
+        if not isinstance(instance, type(self)):
+            raise ValueError('Can only use from_instance with an object of the same type')
 
-class Priceable(Base):
+        for prop in self.properties():
+            attr = getattr(super().__getattribute__('__class__'), prop)
+            if attr.fset:
+                super(Base, self).__setattr__(prop, super(Base, instance).__getattribute__(prop))
 
-    """A priceable, such as a derivative instrument"""
+
+class Priceable(Base, metaclass=ABCMeta):
 
     PROVIDER = None
 
-    def __init__(self):
-        super().__init__()
-        self._resolution_info: dict = None
-        self.unresolved: Priceable = None
-
-    def __getattribute__(self, name):
-        resolved = False
-
-        try:
-            resolved = super().__getattribute__('_resolution_info') is not None
-        except AttributeError:
-            pass
-
-        from gs_quant.session import GsSession
-
-        if GsSession.current_is_set and not resolved:
-            attr = getattr(super().__getattribute__('__class__'), name, None)
-            if attr and isinstance(attr, property) and super().__getattribute__(name) is None:
-                self.resolve()
-
-        return super().__getattribute__(name)
-
-    def _property_changed(self, prop: str):
-        super()._property_changed(prop)
-        self._resolution_info = None
-
-    def get_quantity(self) -> float:
-        """
-        Quantity of the instrument
-        """
-        return 1
-
-    def provider(self) -> 'RiskApi':
+    def provider(self):
         """
         The risk provider - defaults to GsRiskApi
         """
         if self.PROVIDER is None:
             from gs_quant.api.gs.risk import GsRiskApi
-            self.PROVIDER = GsRiskApi
+            type(self).PROVIDER = GsRiskApi
 
         return self.PROVIDER
 
-    def resolve(self, in_place: bool=True) -> Optional['Priceable']:
+    def get_quantity(self) -> float:
+        """
+        Quantity of the instrument
+        """
+        raise NotImplementedError
+
+    def resolve(self, in_place: bool=True):
         """
         Resolve non-supplied properties of an instrument
 
@@ -331,10 +379,9 @@ class Priceable(Base):
 
         rates is now the solved fixed rate
         """
-        from gs_quant.risk import PricingContext
-        return PricingContext.current.resolve_fields(self, in_place)
+        raise NotImplementedError
 
-    def dollar_price(self) -> Union[float, Future]:
+    def dollar_price(self):
         """
         Present value in USD
 
@@ -352,7 +399,7 @@ class Priceable(Base):
         >>> cap_usd = IRCap('1y', 'USD')
         >>> cap_eur = IRCap('1y', 'EUR')
         >>>
-        >>> from gs_quant.risk import PricingContext
+        >>> from gs_quant.markets import PricingContext
         >>>
         >>> with PricingContext():
         >>>     price_usd_f = cap_usd.dollar_price()
@@ -363,11 +410,9 @@ class Priceable(Base):
 
         price_usd_f and price_eur_f are futures, price_usd and price_eur are floats
         """
+        raise NotImplementedError
 
-        from gs_quant.risk import DollarPrice
-        return self.calc(DollarPrice)
-
-    def price(self) -> Union[float, Future]:
+    def price(self):
         """
         Present value in local currency. Note that this is not yet supported on all instruments
 
@@ -380,15 +425,15 @@ class Priceable(Base):
 
         price is the present value in EUR (a float)
         """
-        from gs_quant.risk import Price
-        return self.calc(Price)
+        raise NotImplementedError
 
-    def calc(self, risk_measure: 'RiskMeasure') -> Union[float, pd.DataFrame, Future]:
+    def calc(self, risk_measure):
         """
         Calculate the value of the risk_measure
 
         :param risk_measure: the risk measure to compute, e.g. IRDelta (from gs_quant.risk)
-        :return: a float or dataframe, depending on whether the value is scalar or structured, or a future thereof (depending on how PricingContext is being used)
+        :return: a float or dataframe, depending on whether the value is scalar or structured, or a future thereof
+        (depending on how PricingContext is being used)
 
         **Examples**
 
@@ -408,7 +453,7 @@ class Priceable(Base):
 
         delta is a float
 
-        >>> from gs_quant.risk import PricingContext
+        >>> from gs_quant.markets import PricingContext
         >>>
         >>> cap_usd = IRCap('1y', 'USD')
         >>> cap_eur = IRCap('1y', 'EUR')
@@ -422,50 +467,19 @@ class Priceable(Base):
 
         usd_delta_f and eur_delta_f are futures, usd_delta and eur_delta are dataframes
         """
-        from gs_quant.risk import PricingContext, get_specific_risk_measure
-        specific_risk_measure = get_specific_risk_measure(risk_measure, self)
-        if specific_risk_measure is None:
-            raise ValueError('Unsupported risk measure')
-
-        return PricingContext.current.calc(self, specific_risk_measure)
+        raise NotImplementedError
 
 
-class Instrument(Priceable):
+class __ScenarioMeta(ABCMeta, ContextMeta):
+    pass
 
-    __asset_class_and_type_to_instrument = {}
 
-    @classmethod
-    def asset_class_and_type_to_instrument(cls) -> Mapping[Tuple['AssetClass', 'AssetType'], 'Instrument']:
-        if not cls.__asset_class_and_type_to_instrument:
-            import gs_quant.target.instrument as instrument
-            import inspect
-            instrument_classes = [c for _, c in inspect.getmembers(instrument, inspect.isclass) if
-                                  issubclass(c, Instrument) and c is not Instrument]
+class Scenario(Base, ContextBase, metaclass=__ScenarioMeta):
+    pass
 
-            cls.__asset_class_and_type_to_instrument[(instrument.AssetClass.Cash, instrument.AssetType.Currency)] = instrument.Forward
 
-            for clazz in instrument_classes:
-                instrument = clazz.default_instance()
-                cls.__asset_class_and_type_to_instrument[(instrument.asset_class, instrument.type)] = clazz
-
-        return cls.__asset_class_and_type_to_instrument
-
-    @classmethod
-    def from_dict(cls, values: dict) -> Optional[Union['Instrument', 'Security']]:
-        from gs_quant.target.instrument import AssetClass, AssetType
-
-        if not values:
-            return None
-
-        instrument_type = cls.asset_class_and_type_to_instrument().get((
-            get_enum_value(AssetClass, values.pop('asset_class')),
-            get_enum_value(AssetType, values.pop('type'))))
-
-        if instrument_type:
-            return instrument_type._from_dict(values)
-        else:
-            from gs_quant.instrument import Security
-            return Security.from_dict(values)
+class InstrumentBase(Base):
+    pass
 
 
 def get_enum_value(enum_type: EnumMeta, value: Union[EnumBase, str]):

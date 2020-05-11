@@ -18,7 +18,7 @@ from gs_quant.target.common import *
 import datetime
 from typing import Tuple, Union
 from enum import Enum
-from gs_quant.base import Base, EnumBase, get_enum_value
+from gs_quant.base import Base, EnumBase, InstrumentBase, camel_case_translate, get_enum_value
 
 
 class PortfolioType(EnumBase, Enum):    
@@ -27,13 +27,76 @@ class PortfolioType(EnumBase, Enum):
 
     Securities_Lending = 'Securities Lending'
     Draft_Portfolio = 'Draft Portfolio'
+    Draft_Bond = 'Draft Bond'
     
     def __repr__(self):
         return self.value
 
 
+class GRDBPortfolioParameters(Base):
+        
+    """Parameters required for a GRDB portfolio."""
+
+    @camel_case_translate
+    def __init__(
+        self,
+        oe_id: str,
+        name: str = None
+    ):        
+        super().__init__()
+        self.oe_id = oe_id
+        self.name = name
+
+    @property
+    def oe_id(self) -> str:
+        """Marquee unique identifier"""
+        return self.__oe_id
+
+    @oe_id.setter
+    def oe_id(self, value: str):
+        self._property_changed('oe_id')
+        self.__oe_id = value        
+
+
+class SecDbBookDetail(Base):
+        
+    """Details about SecDb Book"""
+
+    @camel_case_translate
+    def __init__(
+        self,
+        book_id: str = None,
+        book_type: str = None,
+        name: str = None
+    ):        
+        super().__init__()
+        self.book_id = book_id
+        self.book_type = book_type
+        self.name = name
+
+    @property
+    def book_id(self) -> str:
+        """Book Id"""
+        return self.__book_id
+
+    @book_id.setter
+    def book_id(self, value: str):
+        self._property_changed('book_id')
+        self.__book_id = value        
+
+    @property
+    def book_type(self) -> str:
+        return self.__book_type
+
+    @book_type.setter
+    def book_type(self, value: str):
+        self._property_changed('book_type')
+        self.__book_type = value        
+
+
 class Portfolio(Base):
-               
+        
+    @camel_case_translate
     def __init__(
         self,
         currency: Union[Currency, str],
@@ -53,7 +116,7 @@ class Portfolio(Base):
         underlying_portfolio_ids: Tuple[str, ...] = None,
         tags: Tuple[str, ...] = None,
         type_: Union[PortfolioType, str] = None,
-        parameters: LiquidityRequest = None
+        parameters: dict = None
     ):        
         super().__init__()
         self.created_by_id = created_by_id
@@ -77,32 +140,33 @@ class Portfolio(Base):
 
     @property
     def created_by_id(self) -> str:
-        """Unique identifier of user who created the object"""
+        """Unique identifier of user who created the object."""
         return self.__created_by_id
 
     @created_by_id.setter
     def created_by_id(self, value: str):
-        self.__created_by_id = value
-        self._property_changed('created_by_id')        
+        self._property_changed('created_by_id')
+        self.__created_by_id = value        
 
     @property
     def created_time(self) -> datetime.datetime:
-        """Time created. ISO 8601 formatted string"""
+        """Time created. ISO 8601 formatted string."""
         return self.__created_time
 
     @created_time.setter
     def created_time(self, value: datetime.datetime):
-        self.__created_time = value
-        self._property_changed('created_time')        
+        self._property_changed('created_time')
+        self.__created_time = value        
 
     @property
     def currency(self) -> Union[Currency, str]:
+        """Currency, ISO 4217 currency code or exchange quote modifier (e.g. GBP vs GBp)"""
         return self.__currency
 
     @currency.setter
     def currency(self, value: Union[Currency, str]):
-        self.__currency = get_enum_value(Currency, value)
-        self._property_changed('currency')        
+        self._property_changed('currency')
+        self.__currency = get_enum_value(Currency, value)        
 
     @property
     def description(self) -> str:
@@ -112,28 +176,28 @@ class Portfolio(Base):
 
     @description.setter
     def description(self, value: str):
-        self.__description = value
-        self._property_changed('description')        
+        self._property_changed('description')
+        self.__description = value        
 
     @property
     def entitlements(self) -> Entitlements:
-        """Defines the entitlements of a given resource"""
+        """Defines the entitlements of a given resource."""
         return self.__entitlements
 
     @entitlements.setter
     def entitlements(self, value: Entitlements):
-        self.__entitlements = value
-        self._property_changed('entitlements')        
+        self._property_changed('entitlements')
+        self.__entitlements = value        
 
     @property
     def entitlement_exclusions(self) -> EntitlementExclusions:
-        """Defines the exclusion entitlements of a given resource"""
+        """Defines the exclusion entitlements of a given resource."""
         return self.__entitlement_exclusions
 
     @entitlement_exclusions.setter
     def entitlement_exclusions(self, value: EntitlementExclusions):
-        self.__entitlement_exclusions = value
-        self._property_changed('entitlement_exclusions')        
+        self._property_changed('entitlement_exclusions')
+        self.__entitlement_exclusions = value        
 
     @property
     def id(self) -> str:
@@ -142,8 +206,8 @@ class Portfolio(Base):
 
     @id.setter
     def id(self, value: str):
-        self.__id = value
-        self._property_changed('id')        
+        self._property_changed('id')
+        self.__id = value        
 
     @property
     def identifiers(self) -> Tuple[Identifier, ...]:
@@ -153,28 +217,28 @@ class Portfolio(Base):
 
     @identifiers.setter
     def identifiers(self, value: Tuple[Identifier, ...]):
-        self.__identifiers = value
-        self._property_changed('identifiers')        
+        self._property_changed('identifiers')
+        self.__identifiers = value        
 
     @property
     def last_updated_by_id(self) -> str:
-        """Unique identifier of user who last updated the object"""
+        """Unique identifier of user who last updated the object."""
         return self.__last_updated_by_id
 
     @last_updated_by_id.setter
     def last_updated_by_id(self, value: str):
-        self.__last_updated_by_id = value
-        self._property_changed('last_updated_by_id')        
+        self._property_changed('last_updated_by_id')
+        self.__last_updated_by_id = value        
 
     @property
     def last_updated_time(self) -> datetime.datetime:
-        """Timestamp of when the object was last updated"""
+        """Timestamp of when the object was last updated."""
         return self.__last_updated_time
 
     @last_updated_time.setter
     def last_updated_time(self, value: datetime.datetime):
-        self.__last_updated_time = value
-        self._property_changed('last_updated_time')        
+        self._property_changed('last_updated_time')
+        self.__last_updated_time = value        
 
     @property
     def name(self) -> str:
@@ -183,8 +247,8 @@ class Portfolio(Base):
 
     @name.setter
     def name(self, value: str):
-        self.__name = value
-        self._property_changed('name')        
+        self._property_changed('name')
+        self.__name = value        
 
     @property
     def owner_id(self) -> str:
@@ -193,8 +257,8 @@ class Portfolio(Base):
 
     @owner_id.setter
     def owner_id(self, value: str):
-        self.__owner_id = value
-        self._property_changed('owner_id')        
+        self._property_changed('owner_id')
+        self.__owner_id = value        
 
     @property
     def report_ids(self) -> Tuple[str, ...]:
@@ -203,8 +267,8 @@ class Portfolio(Base):
 
     @report_ids.setter
     def report_ids(self, value: Tuple[str, ...]):
-        self.__report_ids = value
-        self._property_changed('report_ids')        
+        self._property_changed('report_ids')
+        self.__report_ids = value        
 
     @property
     def short_name(self) -> str:
@@ -213,8 +277,8 @@ class Portfolio(Base):
 
     @short_name.setter
     def short_name(self, value: str):
-        self.__short_name = value
-        self._property_changed('short_name')        
+        self._property_changed('short_name')
+        self.__short_name = value        
 
     @property
     def underlying_portfolio_ids(self) -> Tuple[str, ...]:
@@ -223,8 +287,8 @@ class Portfolio(Base):
 
     @underlying_portfolio_ids.setter
     def underlying_portfolio_ids(self, value: Tuple[str, ...]):
-        self.__underlying_portfolio_ids = value
-        self._property_changed('underlying_portfolio_ids')        
+        self._property_changed('underlying_portfolio_ids')
+        self.__underlying_portfolio_ids = value        
 
     @property
     def tags(self) -> Tuple[str, ...]:
@@ -234,8 +298,8 @@ class Portfolio(Base):
 
     @tags.setter
     def tags(self, value: Tuple[str, ...]):
-        self.__tags = value
-        self._property_changed('tags')        
+        self._property_changed('tags')
+        self.__tags = value        
 
     @property
     def type(self) -> Union[PortfolioType, str]:
@@ -244,14 +308,14 @@ class Portfolio(Base):
 
     @type.setter
     def type(self, value: Union[PortfolioType, str]):
-        self.__type = get_enum_value(PortfolioType, value)
-        self._property_changed('type')        
+        self._property_changed('type')
+        self.__type = get_enum_value(PortfolioType, value)        
 
     @property
-    def parameters(self) -> LiquidityRequest:
+    def parameters(self) -> dict:
         return self.__parameters
 
     @parameters.setter
-    def parameters(self, value: LiquidityRequest):
-        self.__parameters = value
-        self._property_changed('parameters')        
+    def parameters(self, value: dict):
+        self._property_changed('parameters')
+        self.__parameters = value        

@@ -14,28 +14,55 @@ For methods of this class, see :doc:`gs_quant.base.Priceable`
    
    
    
-   .. autoattribute:: callAmount
+   .. autoattribute:: buy_sell
    
    
-   .. autoattribute:: callCurrency
+   .. autoattribute:: call_amount
    
    
-   .. autoattribute:: expirationDate
+   .. autoattribute:: call_currency
    
    
-   .. autoattribute:: optionType
+   .. autoattribute:: expiration_date
+   
+   
+   .. autoattribute:: expiration_time
+   
+   
+   .. autoattribute:: method_of_settlement
+   
+   
+   .. autoattribute:: option_type
+   
+   
+   .. autoattribute:: pair
    
    
    .. autoattribute:: premium
    
    
-   .. autoattribute:: putAmount
+   .. autoattribute:: premium_currency
    
    
-   .. autoattribute:: putCurrency
+   .. autoattribute:: premium_payment_date
    
    
-   .. autoattribute:: strike
+   .. autoattribute:: put_amount
+   
+   
+   .. autoattribute:: put_currency
+   
+   
+   .. autoattribute:: settlement_currency
+   
+   
+   .. autoattribute:: settlement_date
+   
+   
+   .. autoattribute:: settlement_rate_option
+   
+   
+   .. autoattribute:: strike_price
    
    
    

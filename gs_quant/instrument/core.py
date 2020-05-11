@@ -13,20 +13,70 @@ KIND, either express or implied.  See the License for the
 specific language governing permissions and limitations
 under the License.
 """
-from gs_quant.target.common import RiskPosition
-from gs_quant.target.instrument import *
-from gs_quant.common import XRef
+from gs_quant.base import get_enum_value, InstrumentBase
+from gs_quant.common import AssetClass, AssetType, XRef
+from gs_quant.priceable import PriceableImpl
 
-from typing import Iterable, Mapping, Union
+from abc import ABCMeta
+import inspect
 
-__asset_class_and_type_to_instrument = {}
+
+class Instrument(PriceableImpl, InstrumentBase, metaclass=ABCMeta):
+
+    __instrument_mappings = {}
+
+    @classmethod
+    def __asset_class_and_type_to_instrument(cls):
+        if not cls.__instrument_mappings:
+            import gs_quant.target.instrument as instrument_
+            instrument_classes = [c for _, c in inspect.getmembers(instrument_, inspect.isclass) if
+                                  issubclass(c, Instrument) and c is not Instrument]
+
+            cls.__instrument_mappings[(AssetClass.Cash, AssetType.Currency)] = instrument_.Forward
+
+            for clazz in instrument_classes:
+                instrument = clazz.default_instance()
+                cls.__instrument_mappings[(instrument.asset_class, instrument.type)] = clazz
+
+        return cls.__instrument_mappings
+
+    @classmethod
+    def from_dict(cls, values: dict):
+        if values:
+            if hasattr(cls, '_derived_type'):
+                if 'properties' in values:
+                    values.update(values.pop('properties'))
+                return cls._from_dict(values)
+            elif hasattr(cls, 'asset_class'):
+                return cls._from_dict(values)
+            else:
+                if '$type' in values:
+                    from gs_quant_internal import tdapi
+                    tdapi_cls = getattr(tdapi, values['$type'])
+                    if not tdapi_cls:
+                        raise RuntimeError('Cannot resolve TDAPI type {}'.format(tdapi_type))
+
+                    return tdapi_cls.from_dict(values)
+                asset_class_field = next((f for f in ('asset_class', 'assetClass') if f in values), None)
+                if not asset_class_field:
+                    raise ValueError('assetClass/asset_class not specified')
+
+                return cls.__asset_class_and_type_to_instrument().get((
+                    get_enum_value(AssetClass, values.pop(asset_class_field)),
+                    get_enum_value(AssetType, values.pop('type'))), Security)._from_dict(values)
 
 
-class Security(XRef):
+class Security(XRef, Instrument):
 
     """A security, specified by a well-known identifier"""
 
-    def __init__(self, ticker: str=None, bbid: str=None, isin: str=None, cusip: str=None, prime_id: str=None, quantity: float=1):
+    def __init__(self,
+                 ticker: str = None,
+                 bbid: str = None,
+                 isin: str = None,
+                 cusip: str = None,
+                 prime_id: str = None,
+                 quantity: float = 1):
         """
         Create a security by passing one identifier only and, optionally, a quantity
 

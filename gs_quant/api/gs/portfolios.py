@@ -15,10 +15,11 @@ under the License.
 """
 import datetime as dt
 import logging
-from typing import Tuple
+from typing import Tuple, Union
 
-from gs_quant.session import GsSession
-from gs_quant.target.portfolios import Portfolio, PositionSet
+from gs_quant.instrument import Instrument
+from gs_quant.session import Environment, GsSession
+from gs_quant.target.portfolios import Portfolio, Position, PositionSet
 from gs_quant.target.reports import Report
 
 _logger = logging.getLogger(__name__)
@@ -27,8 +28,6 @@ _logger = logging.getLogger(__name__)
 class GsPortfolioApi:
     """GS Asset API client implementation"""
 
-    # CRUD
-
     @classmethod
     def get_portfolios(cls, limit: int = 100) -> Tuple[Portfolio, ...]:
         return GsSession.current._get('/portfolios?limit={limit}'.format(limit=limit), cls=Portfolio)['results']
@@ -36,6 +35,18 @@ class GsPortfolioApi:
     @classmethod
     def get_portfolio(cls, portfolio_id: str) -> Portfolio:
         return GsSession.current._get('/portfolios/{id}'.format(id=portfolio_id), cls=Portfolio)
+
+    @classmethod
+    def get_portfolio_by_name(cls, name: str) -> Portfolio:
+        ret = GsSession.current._get('/portfolios?name={}'.format(name))
+        num_found = ret.get('totalResults', 0)
+
+        if num_found == 0:
+            raise ValueError('Portfolio {} not found'.format(name))
+        elif num_found > 1:
+            raise ValueError('More than one portfolio named {} found'.format(name))
+        else:
+            return Portfolio.from_dict(ret['results'][0])
 
     @classmethod
     def create_portfolio(cls, portfolio: Portfolio) -> Portfolio:
@@ -72,15 +83,42 @@ class GsPortfolioApi:
         return position_sets[0] if len(position_sets) > 0 else PositionSet()
 
     @classmethod
-    def get_latest_positions(cls, portfolio_id: str, position_type: str = 'close') -> PositionSet:
+    def get_instruments_by_position_type(cls, positions_type: str, positions_id: str) -> Tuple[Instrument, ...]:
+        root = 'deals' if positions_type == 'ETI' else 'books/' + positions_type
+        url = '/risk-internal/{}/{}/positions'.format(root, positions_id)
+
+        with GsSession.get(Environment.QA) as session:
+            # TODO Remove this once in prod
+            results = session._get(url)
+
+        instruments = []
+        for position in results.get('positionSets', ({'positions': ()},))[0]['positions']:
+            instrument_values = position['instrument']
+            instrument = Instrument.from_dict(instrument_values)
+            name = instrument_values.get('name')
+            if name:
+                instrument.name = name
+
+            instruments.append(instrument)
+
+        return tuple(instruments)
+
+    @classmethod
+    def get_latest_positions(cls, portfolio_id: str, position_type: str = 'close') -> Union[PositionSet, dict]:
         url = '/portfolios/{id}/positions/last?type={ptype}'.format(id=portfolio_id, ptype=position_type)
-        position_sets = GsSession.current._get(url, cls=PositionSet)['results']
-        return position_sets[0] if len(position_sets) > 0 else PositionSet()
+        results = GsSession.current._get(url)['results']
+
+        # Annoyingly, different types are returned depending on position_type
+
+        if isinstance(results, dict) and 'positions' in results:
+            results['positions'] = tuple(Position.from_dict(p) for p in results['positions'])
+
+        return results
 
     @classmethod
     def get_position_dates(cls, portfolio_id: str) -> Tuple[dt.date, ...]:
         position_dates = GsSession.current._get('/portfolios/{id}/positions/dates'.format(id=portfolio_id))['results']
-        return tuple([dt.datetime.strptime(d, '%Y-%m-%d').date() for d in position_dates])
+        return tuple(dt.datetime.strptime(d, '%Y-%m-%d').date() for d in position_dates)
 
     @classmethod
     def update_positions(cls, portfolio_id: str, position_sets: Tuple[PositionSet, ...]) -> float:

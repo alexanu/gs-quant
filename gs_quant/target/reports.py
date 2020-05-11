@@ -18,7 +18,7 @@ from gs_quant.target.common import *
 import datetime
 from typing import Tuple, Union
 from enum import Enum
-from gs_quant.base import Base, EnumBase, get_enum_value
+from gs_quant.base import Base, EnumBase, InstrumentBase, camel_case_translate, get_enum_value
 
 
 class BasketAction(EnumBase, Enum):    
@@ -41,6 +41,7 @@ class PositionSourceType(EnumBase, Enum):
     Asset = 'Asset'
     Backtest = 'Backtest'
     RiskRequest = 'RiskRequest'
+    Hedge = 'Hedge'
     
     def __repr__(self):
         return self.value
@@ -100,6 +101,7 @@ class ReportType(EnumBase, Enum):
     Portfolio_Aging = 'Portfolio Aging'
     Asset_Factor_Risk = 'Asset Factor Risk'
     Basket_Create = 'Basket Create'
+    Basket_Backcast = 'Basket Backcast'
     Scenario = 'Scenario'
     Iselect_Backtest = 'Iselect Backtest'
     Backtest_Run = 'Backtest Run'
@@ -124,7 +126,8 @@ class ScenarioType(EnumBase, Enum):
 class ReportParameters(Base):
         
     """Parameters specific to the report type"""
-       
+
+    @camel_case_translate
     def __init__(
         self,
         asset_class: Union[AssetClass, str] = None,
@@ -155,7 +158,11 @@ class ReportParameters(Base):
         backcast: bool = None,
         risk_request: RiskRequest = None,
         participation_rate: float = None,
-        approve_rebalance: bool = None
+        approve_rebalance: bool = None,
+        limited_access_assets: Tuple[str, ...] = None,
+        corporate_action_restricted_assets: Tuple[str, ...] = None,
+        backcast_dates: Tuple[datetime.date, ...] = None,
+        name: str = None
     ):        
         super().__init__()
         self.asset_class = asset_class
@@ -187,6 +194,10 @@ class ReportParameters(Base):
         self.risk_request = risk_request
         self.participation_rate = participation_rate
         self.approve_rebalance = approve_rebalance
+        self.limited_access_assets = limited_access_assets
+        self.corporate_action_restricted_assets = corporate_action_restricted_assets
+        self.backcast_dates = backcast_dates
+        self.name = name
 
     @property
     def asset_class(self) -> Union[AssetClass, str]:
@@ -197,8 +208,8 @@ class ReportParameters(Base):
 
     @asset_class.setter
     def asset_class(self, value: Union[AssetClass, str]):
-        self.__asset_class = get_enum_value(AssetClass, value)
-        self._property_changed('asset_class')        
+        self._property_changed('asset_class')
+        self.__asset_class = get_enum_value(AssetClass, value)        
 
     @property
     def transaction_cost_model(self) -> str:
@@ -207,8 +218,8 @@ class ReportParameters(Base):
 
     @transaction_cost_model.setter
     def transaction_cost_model(self, value: str):
-        self.__transaction_cost_model = value
-        self._property_changed('transaction_cost_model')        
+        self._property_changed('transaction_cost_model')
+        self.__transaction_cost_model = value        
 
     @property
     def trading_cost(self) -> float:
@@ -217,8 +228,8 @@ class ReportParameters(Base):
 
     @trading_cost.setter
     def trading_cost(self, value: float):
-        self.__trading_cost = value
-        self._property_changed('trading_cost')        
+        self._property_changed('trading_cost')
+        self.__trading_cost = value        
 
     @property
     def servicing_cost_long(self) -> float:
@@ -227,8 +238,8 @@ class ReportParameters(Base):
 
     @servicing_cost_long.setter
     def servicing_cost_long(self, value: float):
-        self.__servicing_cost_long = value
-        self._property_changed('servicing_cost_long')        
+        self._property_changed('servicing_cost_long')
+        self.__servicing_cost_long = value        
 
     @property
     def servicing_cost_short(self) -> float:
@@ -237,8 +248,8 @@ class ReportParameters(Base):
 
     @servicing_cost_short.setter
     def servicing_cost_short(self, value: float):
-        self.__servicing_cost_short = value
-        self._property_changed('servicing_cost_short')        
+        self._property_changed('servicing_cost_short')
+        self.__servicing_cost_short = value        
 
     @property
     def region(self) -> str:
@@ -247,8 +258,8 @@ class ReportParameters(Base):
 
     @region.setter
     def region(self, value: str):
-        self.__region = value
-        self._property_changed('region')        
+        self._property_changed('region')
+        self.__region = value        
 
     @property
     def risk_model(self) -> str:
@@ -257,8 +268,8 @@ class ReportParameters(Base):
 
     @risk_model.setter
     def risk_model(self, value: str):
-        self.__risk_model = value
-        self._property_changed('risk_model')        
+        self._property_changed('risk_model')
+        self.__risk_model = value        
 
     @property
     def fx_hedged(self) -> bool:
@@ -267,8 +278,8 @@ class ReportParameters(Base):
 
     @fx_hedged.setter
     def fx_hedged(self, value: bool):
-        self.__fx_hedged = value
-        self._property_changed('fx_hedged')        
+        self._property_changed('fx_hedged')
+        self.__fx_hedged = value        
 
     @property
     def publish_to_bloomberg(self) -> bool:
@@ -277,8 +288,8 @@ class ReportParameters(Base):
 
     @publish_to_bloomberg.setter
     def publish_to_bloomberg(self, value: bool):
-        self.__publish_to_bloomberg = value
-        self._property_changed('publish_to_bloomberg')        
+        self._property_changed('publish_to_bloomberg')
+        self.__publish_to_bloomberg = value        
 
     @property
     def publish_to_reuters(self) -> bool:
@@ -287,8 +298,8 @@ class ReportParameters(Base):
 
     @publish_to_reuters.setter
     def publish_to_reuters(self, value: bool):
-        self.__publish_to_reuters = value
-        self._property_changed('publish_to_reuters')        
+        self._property_changed('publish_to_reuters')
+        self.__publish_to_reuters = value        
 
     @property
     def include_price_history(self) -> bool:
@@ -297,8 +308,8 @@ class ReportParameters(Base):
 
     @include_price_history.setter
     def include_price_history(self, value: bool):
-        self.__include_price_history = value
-        self._property_changed('include_price_history')        
+        self._property_changed('include_price_history')
+        self.__include_price_history = value        
 
     @property
     def index_update(self) -> bool:
@@ -307,8 +318,8 @@ class ReportParameters(Base):
 
     @index_update.setter
     def index_update(self, value: bool):
-        self.__index_update = value
-        self._property_changed('index_update')        
+        self._property_changed('index_update')
+        self.__index_update = value        
 
     @property
     def index_rebalance(self) -> bool:
@@ -317,8 +328,8 @@ class ReportParameters(Base):
 
     @index_rebalance.setter
     def index_rebalance(self, value: bool):
-        self.__index_rebalance = value
-        self._property_changed('index_rebalance')        
+        self._property_changed('index_rebalance')
+        self.__index_rebalance = value        
 
     @property
     def basket_action(self) -> Union[BasketAction, str]:
@@ -327,8 +338,8 @@ class ReportParameters(Base):
 
     @basket_action.setter
     def basket_action(self, value: Union[BasketAction, str]):
-        self.__basket_action = get_enum_value(BasketAction, value)
-        self._property_changed('basket_action')        
+        self._property_changed('basket_action')
+        self.__basket_action = get_enum_value(BasketAction, value)        
 
     @property
     def api_domain(self) -> bool:
@@ -337,8 +348,8 @@ class ReportParameters(Base):
 
     @api_domain.setter
     def api_domain(self, value: bool):
-        self.__api_domain = value
-        self._property_changed('api_domain')        
+        self._property_changed('api_domain')
+        self.__api_domain = value        
 
     @property
     def initial_price(self) -> float:
@@ -347,8 +358,8 @@ class ReportParameters(Base):
 
     @initial_price.setter
     def initial_price(self, value: float):
-        self.__initial_price = value
-        self._property_changed('initial_price')        
+        self._property_changed('initial_price')
+        self.__initial_price = value        
 
     @property
     def stock_level_exposures(self) -> bool:
@@ -357,8 +368,8 @@ class ReportParameters(Base):
 
     @stock_level_exposures.setter
     def stock_level_exposures(self, value: bool):
-        self.__stock_level_exposures = value
-        self._property_changed('stock_level_exposures')        
+        self._property_changed('stock_level_exposures')
+        self.__stock_level_exposures = value        
 
     @property
     def explode_positions(self) -> bool:
@@ -367,8 +378,8 @@ class ReportParameters(Base):
 
     @explode_positions.setter
     def explode_positions(self, value: bool):
-        self.__explode_positions = value
-        self._property_changed('explode_positions')        
+        self._property_changed('explode_positions')
+        self.__explode_positions = value        
 
     @property
     def scenario_id(self) -> str:
@@ -377,8 +388,8 @@ class ReportParameters(Base):
 
     @scenario_id.setter
     def scenario_id(self, value: str):
-        self.__scenario_id = value
-        self._property_changed('scenario_id')        
+        self._property_changed('scenario_id')
+        self.__scenario_id = value        
 
     @property
     def scenario_ids(self) -> Tuple[str, ...]:
@@ -387,8 +398,8 @@ class ReportParameters(Base):
 
     @scenario_ids.setter
     def scenario_ids(self, value: Tuple[str, ...]):
-        self.__scenario_ids = value
-        self._property_changed('scenario_ids')        
+        self._property_changed('scenario_ids')
+        self.__scenario_ids = value        
 
     @property
     def scenario_group_id(self) -> str:
@@ -397,8 +408,8 @@ class ReportParameters(Base):
 
     @scenario_group_id.setter
     def scenario_group_id(self, value: str):
-        self.__scenario_group_id = value
-        self._property_changed('scenario_group_id')        
+        self._property_changed('scenario_group_id')
+        self.__scenario_group_id = value        
 
     @property
     def scenario_type(self) -> Union[ScenarioType, str]:
@@ -407,8 +418,8 @@ class ReportParameters(Base):
 
     @scenario_type.setter
     def scenario_type(self, value: Union[ScenarioType, str]):
-        self.__scenario_type = get_enum_value(ScenarioType, value)
-        self._property_changed('scenario_type')        
+        self._property_changed('scenario_type')
+        self.__scenario_type = get_enum_value(ScenarioType, value)        
 
     @property
     def market_model_id(self) -> str:
@@ -417,8 +428,8 @@ class ReportParameters(Base):
 
     @market_model_id.setter
     def market_model_id(self, value: str):
-        self.__market_model_id = value
-        self._property_changed('market_model_id')        
+        self._property_changed('market_model_id')
+        self.__market_model_id = value        
 
     @property
     def risk_measures(self) -> Tuple[RiskMeasure, ...]:
@@ -427,8 +438,8 @@ class ReportParameters(Base):
 
     @risk_measures.setter
     def risk_measures(self, value: Tuple[RiskMeasure, ...]):
-        self.__risk_measures = value
-        self._property_changed('risk_measures')        
+        self._property_changed('risk_measures')
+        self.__risk_measures = value        
 
     @property
     def initial_pricing_date(self) -> datetime.date:
@@ -437,8 +448,8 @@ class ReportParameters(Base):
 
     @initial_pricing_date.setter
     def initial_pricing_date(self, value: datetime.date):
-        self.__initial_pricing_date = value
-        self._property_changed('initial_pricing_date')        
+        self._property_changed('initial_pricing_date')
+        self.__initial_pricing_date = value        
 
     @property
     def backcast(self) -> bool:
@@ -447,8 +458,8 @@ class ReportParameters(Base):
 
     @backcast.setter
     def backcast(self, value: bool):
-        self.__backcast = value
-        self._property_changed('backcast')        
+        self._property_changed('backcast')
+        self.__backcast = value        
 
     @property
     def risk_request(self) -> RiskRequest:
@@ -457,8 +468,8 @@ class ReportParameters(Base):
 
     @risk_request.setter
     def risk_request(self, value: RiskRequest):
-        self.__risk_request = value
-        self._property_changed('risk_request')        
+        self._property_changed('risk_request')
+        self.__risk_request = value        
 
     @property
     def participation_rate(self) -> float:
@@ -467,8 +478,8 @@ class ReportParameters(Base):
 
     @participation_rate.setter
     def participation_rate(self, value: float):
-        self.__participation_rate = value
-        self._property_changed('participation_rate')        
+        self._property_changed('participation_rate')
+        self.__participation_rate = value        
 
     @property
     def approve_rebalance(self) -> bool:
@@ -477,12 +488,44 @@ class ReportParameters(Base):
 
     @approve_rebalance.setter
     def approve_rebalance(self, value: bool):
-        self.__approve_rebalance = value
-        self._property_changed('approve_rebalance')        
+        self._property_changed('approve_rebalance')
+        self.__approve_rebalance = value        
+
+    @property
+    def limited_access_assets(self) -> Tuple[str, ...]:
+        """List of constituents in the basket that GS has limited access to"""
+        return self.__limited_access_assets
+
+    @limited_access_assets.setter
+    def limited_access_assets(self, value: Tuple[str, ...]):
+        self._property_changed('limited_access_assets')
+        self.__limited_access_assets = value        
+
+    @property
+    def corporate_action_restricted_assets(self) -> Tuple[str, ...]:
+        """List of constituents in the basket that will not be adjusted for corporate
+           actions in the future"""
+        return self.__corporate_action_restricted_assets
+
+    @corporate_action_restricted_assets.setter
+    def corporate_action_restricted_assets(self, value: Tuple[str, ...]):
+        self._property_changed('corporate_action_restricted_assets')
+        self.__corporate_action_restricted_assets = value        
+
+    @property
+    def backcast_dates(self) -> Tuple[datetime.date, ...]:
+        """List of dates user upload to backcast basket"""
+        return self.__backcast_dates
+
+    @backcast_dates.setter
+    def backcast_dates(self, value: Tuple[datetime.date, ...]):
+        self._property_changed('backcast_dates')
+        self.__backcast_dates = value        
 
 
 class Report(Base):
-               
+        
+    @camel_case_translate
     def __init__(
         self,
         position_source_id: str,
@@ -537,8 +580,8 @@ class Report(Base):
 
     @calculation_time.setter
     def calculation_time(self, value: float):
-        self.__calculation_time = value
-        self._property_changed('calculation_time')        
+        self._property_changed('calculation_time')
+        self.__calculation_time = value        
 
     @property
     def data_set_id(self) -> str:
@@ -547,8 +590,8 @@ class Report(Base):
 
     @data_set_id.setter
     def data_set_id(self, value: str):
-        self.__data_set_id = value
-        self._property_changed('data_set_id')        
+        self._property_changed('data_set_id')
+        self.__data_set_id = value        
 
     @property
     def asset_id(self) -> str:
@@ -557,8 +600,8 @@ class Report(Base):
 
     @asset_id.setter
     def asset_id(self, value: str):
-        self.__asset_id = value
-        self._property_changed('asset_id')        
+        self._property_changed('asset_id')
+        self.__asset_id = value        
 
     @property
     def created_by_id(self) -> str:
@@ -567,38 +610,38 @@ class Report(Base):
 
     @created_by_id.setter
     def created_by_id(self, value: str):
-        self.__created_by_id = value
-        self._property_changed('created_by_id')        
+        self._property_changed('created_by_id')
+        self.__created_by_id = value        
 
     @property
     def created_time(self) -> datetime.datetime:
-        """Time created. ISO 8601 formatted string"""
+        """Time created. ISO 8601 formatted string."""
         return self.__created_time
 
     @created_time.setter
     def created_time(self, value: datetime.datetime):
-        self.__created_time = value
-        self._property_changed('created_time')        
+        self._property_changed('created_time')
+        self.__created_time = value        
 
     @property
     def entitlements(self) -> Entitlements:
-        """Defines the entitlements of a given resource"""
+        """Defines the entitlements of a given resource."""
         return self.__entitlements
 
     @entitlements.setter
     def entitlements(self, value: Entitlements):
-        self.__entitlements = value
-        self._property_changed('entitlements')        
+        self._property_changed('entitlements')
+        self.__entitlements = value        
 
     @property
     def entitlement_exclusions(self) -> EntitlementExclusions:
-        """Defines the exclusion entitlements of a given resource"""
+        """Defines the exclusion entitlements of a given resource."""
         return self.__entitlement_exclusions
 
     @entitlement_exclusions.setter
     def entitlement_exclusions(self, value: EntitlementExclusions):
-        self.__entitlement_exclusions = value
-        self._property_changed('entitlement_exclusions')        
+        self._property_changed('entitlement_exclusions')
+        self.__entitlement_exclusions = value        
 
     @property
     def id(self) -> str:
@@ -607,8 +650,8 @@ class Report(Base):
 
     @id.setter
     def id(self, value: str):
-        self.__id = value
-        self._property_changed('id')        
+        self._property_changed('id')
+        self.__id = value        
 
     @property
     def last_updated_by_id(self) -> str:
@@ -617,18 +660,18 @@ class Report(Base):
 
     @last_updated_by_id.setter
     def last_updated_by_id(self, value: str):
-        self.__last_updated_by_id = value
-        self._property_changed('last_updated_by_id')        
+        self._property_changed('last_updated_by_id')
+        self.__last_updated_by_id = value        
 
     @property
     def last_updated_time(self) -> datetime.datetime:
-        """Timestamp of when the object was last updated"""
+        """Timestamp of when the object was last updated."""
         return self.__last_updated_time
 
     @last_updated_time.setter
     def last_updated_time(self, value: datetime.datetime):
-        self.__last_updated_time = value
-        self._property_changed('last_updated_time')        
+        self._property_changed('last_updated_time')
+        self.__last_updated_time = value        
 
     @property
     def measures(self) -> Tuple[Union[ReportMeasures, str], ...]:
@@ -637,8 +680,8 @@ class Report(Base):
 
     @measures.setter
     def measures(self, value: Tuple[Union[ReportMeasures, str], ...]):
-        self.__measures = value
-        self._property_changed('measures')        
+        self._property_changed('measures')
+        self.__measures = value        
 
     @property
     def name(self) -> str:
@@ -647,8 +690,8 @@ class Report(Base):
 
     @name.setter
     def name(self, value: str):
-        self.__name = value
-        self._property_changed('name')        
+        self._property_changed('name')
+        self.__name = value        
 
     @property
     def owner_id(self) -> str:
@@ -657,8 +700,8 @@ class Report(Base):
 
     @owner_id.setter
     def owner_id(self, value: str):
-        self.__owner_id = value
-        self._property_changed('owner_id')        
+        self._property_changed('owner_id')
+        self.__owner_id = value        
 
     @property
     def parameters(self) -> ReportParameters:
@@ -667,8 +710,8 @@ class Report(Base):
 
     @parameters.setter
     def parameters(self, value: ReportParameters):
-        self.__parameters = value
-        self._property_changed('parameters')        
+        self._property_changed('parameters')
+        self.__parameters = value        
 
     @property
     def position_source_id(self) -> str:
@@ -677,8 +720,8 @@ class Report(Base):
 
     @position_source_id.setter
     def position_source_id(self, value: str):
-        self.__position_source_id = value
-        self._property_changed('position_source_id')        
+        self._property_changed('position_source_id')
+        self.__position_source_id = value        
 
     @property
     def position_source_type(self) -> Union[PositionSourceType, str]:
@@ -687,8 +730,8 @@ class Report(Base):
 
     @position_source_type.setter
     def position_source_type(self, value: Union[PositionSourceType, str]):
-        self.__position_source_type = get_enum_value(PositionSourceType, value)
-        self._property_changed('position_source_type')        
+        self._property_changed('position_source_type')
+        self.__position_source_type = get_enum_value(PositionSourceType, value)        
 
     @property
     def type(self) -> Union[ReportType, str]:
@@ -697,8 +740,8 @@ class Report(Base):
 
     @type.setter
     def type(self, value: Union[ReportType, str]):
-        self.__type = get_enum_value(ReportType, value)
-        self._property_changed('type')        
+        self._property_changed('type')
+        self.__type = get_enum_value(ReportType, value)        
 
     @property
     def status(self) -> Union[ReportStatus, str]:
@@ -707,8 +750,8 @@ class Report(Base):
 
     @status.setter
     def status(self, value: Union[ReportStatus, str]):
-        self.__status = get_enum_value(ReportStatus, value)
-        self._property_changed('status')        
+        self._property_changed('status')
+        self.__status = get_enum_value(ReportStatus, value)        
 
     @property
     def latest_execution_time(self) -> datetime.datetime:
@@ -717,8 +760,8 @@ class Report(Base):
 
     @latest_execution_time.setter
     def latest_execution_time(self, value: datetime.datetime):
-        self.__latest_execution_time = value
-        self._property_changed('latest_execution_time')        
+        self._property_changed('latest_execution_time')
+        self.__latest_execution_time = value        
 
     @property
     def latest_end_date(self) -> datetime.date:
@@ -727,8 +770,8 @@ class Report(Base):
 
     @latest_end_date.setter
     def latest_end_date(self, value: datetime.date):
-        self.__latest_end_date = value
-        self._property_changed('latest_end_date')        
+        self._property_changed('latest_end_date')
+        self.__latest_end_date = value        
 
     @property
     def percentage_complete(self) -> float:
@@ -737,5 +780,5 @@ class Report(Base):
 
     @percentage_complete.setter
     def percentage_complete(self, value: float):
-        self.__percentage_complete = value
-        self._property_changed('percentage_complete')        
+        self._property_changed('percentage_complete')
+        self.__percentage_complete = value        

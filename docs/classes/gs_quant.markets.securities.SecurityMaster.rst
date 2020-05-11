@@ -13,6 +13,7 @@ SecurityMaster
 
    .. autosummary::
    
+      ~SecurityMaster.__init__
       ~SecurityMaster.get_asset
    
    

@@ -13,6 +13,7 @@ KIND, either express or implied.  See the License for the
 specific language governing permissions and limitations
 under the License.
 """
+from dateutil.parser import isoparse
 import logging
 import re
 from typing import Iterable
@@ -21,8 +22,9 @@ import gs_quant.target.backtests as backtests
 from gs_quant.api.gs.backtests import GsBacktestApi
 from gs_quant.backtests.core import Backtest, QuantityType, TradeInMethod
 from gs_quant.errors import MqValueError
+from gs_quant.markets import PricingContext
 from gs_quant.target.backtests import *
-from gs_quant.target.instrument import EqOption
+from gs_quant.target.instrument import EqOption, EqVarianceSwap
 
 _logger = logging.getLogger(__name__)
 
@@ -36,7 +38,7 @@ class StrategySystematic:
     """Equity back testing systematic strategy"""
 
     def __init__(self,
-                 underliers: Union[EqOption, Iterable[EqOption]],
+                 underliers: Union[EqOption, Iterable[EqOption], EqVarianceSwap, Iterable[EqVarianceSwap]],
                  quantity: float = 1,
                  quantity_type: Union[QuantityType, str] = QuantityType.Notional,
                  trade_in_method: Union[TradeInMethod, str] = TradeInMethod.FixedRoll,
@@ -62,26 +64,28 @@ class StrategySystematic:
 
         self.__underliers = []
 
-        if isinstance(underliers, EqOption):
+        if isinstance(underliers, (EqOption, EqVarianceSwap)):
             instrument = underliers
             notional_percentage = 100
-            self.check_underlier_fields(instrument)
+            instrument = self.check_underlier_fields(instrument)
             self.__underliers.append(BacktestStrategyUnderlier(
                 instrument=instrument,
                 notional_percentage=notional_percentage,
                 hedge=BacktestStrategyUnderlierHedge(risk_details=delta_hedge),
                 market_model=EQ_MARKET_MODEL))
         else:
-            for eq_option in underliers:
-                if isinstance(eq_option, tuple):
-                    instrument = eq_option[0]
-                    notional_percentage = eq_option[1]
-                elif isinstance(eq_option, EqOption):
-                    instrument = eq_option
-                    notional_percentage = 100
+            for underlier in underliers:
+                if isinstance(underlier, tuple):
+                    instrument = underlier[0]
+                    notional_percentage = underlier[1]
                 else:
-                    raise MqValueError('The format of the backtest asset is incorrect.')
-                self.check_underlier_fields(instrument)
+                    instrument = underlier
+                    notional_percentage = 100
+
+                if not isinstance(instrument, (EqOption, EqVarianceSwap)):
+                    raise MqValueError('The format of the backtest asset is inscorrect.')
+
+                instrument = self.check_underlier_fields(instrument)
                 self.__underliers.append(BacktestStrategyUnderlier(
                     instrument=instrument,
                     notional_percentage=notional_percentage,
@@ -100,16 +104,22 @@ class StrategySystematic:
 
     @staticmethod
     def check_underlier_fields(
-            underlier: EqOption
-    ) -> bool:
+            underlier: Union[EqOption, EqVarianceSwap]
+    ) -> Union[EqOption, EqVarianceSwap]:
         # validation for different fields
         if isinstance(underlier.expiration_date, datetime.date):
-            raise MqValueError('Datetime.date format for expiration date field is not supported for backtest service')
+            underlier = underlier.clone()
+            underlier.expiration_date = '{}d'.format(
+                (underlier.expiration_date - PricingContext.current.pricing_date).days)
         elif re.search(ISO_FORMAT, underlier.expiration_date) is not None:
-            if datetime.datetime.strptime(underlier.expiration_date, "%Y-%m-%d"):
-                raise MqValueError('Date format for expiration date field is not supported for backtest service')
+            underlier = underlier.clone()
+            underlier.expiration_date = '{}d'.format(
+                (isoparse(underlier.expiration_date).date() - PricingContext.current.pricing_date).days)
 
-        return True
+        if isinstance(underlier, EqOption):
+            underlier.number_of_options = None
+
+        return underlier
 
     def backtest(
             self,

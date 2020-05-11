@@ -17,67 +17,359 @@ under the License.
 from gs_quant.target.common import *
 import datetime
 from typing import Tuple, Union
-from gs_quant.base import Base, get_enum_value
+from enum import Enum
+from gs_quant.base import Base, EnumBase, InstrumentBase, camel_case_translate, get_enum_value
 
 
-class ColumnFormat(Base):
+class AssetProperties(EnumBase, Enum):    
+    
+    """Enum listing supported asset properties"""
+
+    assetClass = 'assetClass'
+    currency = 'currency'
+    createdTime = 'createdTime'
+    description = 'description'
+    exchange = 'exchange'
+    id = 'id'
+    liveDate = 'liveDate'
+    name = 'name'
+    region = 'region'
+    shortName = 'shortName'
+    type = 'type'
+    xref_bbid = 'xref.bbid'
+    xref_bcid = 'xref.bcid'
+    xref_ticker = 'xref.ticker'
+    xref_ric = 'xref.ric'
+    date = 'date'
+    value = 'value'
+    slope = 'slope'
+    OIS_value = 'OIS value'
+    
+    def __repr__(self):
+        return self.value
+
+
+class AvailableUnitTypes(EnumBase, Enum):    
+    
+    """Enum listing supported unit types"""
+
+    percentage = 'percentage'
+    percentageWithSymbol = 'percentageWithSymbol'
+    bps = 'bps'
+    bp = 'bp'
+    x = 'x'
+    
+    def __repr__(self):
+        return self.value
+
+
+class EntitiesSupported(EnumBase, Enum):    
+    
+    """Enum listing supported entities"""
+
+    assets = 'assets'
+    kpis = 'kpis'
+    sts = 'sts'
+    tds = 'tds'
+    
+    def __repr__(self):
+        return self.value
+
+
+class ParameterPeriod(EnumBase, Enum):    
+    
+    """Enum listing supported parameter periods"""
+
+    _1d = '1d'
+    _1w = '1w'
+    _1m = '1m'
+    _3m = '3m'
+    _6m = '6m'
+    _1y = '1y'
+    _2y = '2y'
+    _5y = '5y'
+    _10y = '10y'
+    _30y = '30y'
+    mtd = 'mtd'
+    ytd = 'ytd'
+    
+    def __repr__(self):
+        return self.value
+
+
+class ParameterRender(EnumBase, Enum):    
+    
+    """Enum listing supported column definition render types"""
+
+    boxplot = 'boxplot'
+    default = 'default'
+    direction = 'direction'
+    hidden = 'hidden'
+    bar = 'bar'
+    sparkline = 'sparkline'
+    heatmap = 'heatmap'
+    simpleCandlestick = 'simpleCandlestick'
+    progress = 'progress'
+    chart = 'chart'
+    range = 'range'
+    
+    def __repr__(self):
+        return self.value
+
+
+class RateIds(EnumBase, Enum):    
+    
+    """Enum listing supported rate ids"""
+
+    USD = 'USD'
+    EUR = 'EUR'
+    JPY = 'JPY'
+    GBP = 'GBP'
+    CAD = 'CAD'
+    AUD = 'AUD'
+    
+    def __repr__(self):
+        return self.value
+
+
+class SortDirection(EnumBase, Enum):    
+    
+    """Enum with available sort directions"""
+
+    asc = 'asc'
+    desc = 'desc'
+    default = 'default'
+    
+    def __repr__(self):
+        return self.value
+
+
+class SortType(EnumBase, Enum):    
+    
+    """Enum listing supported sort types"""
+
+    value = 'value'
+    abs = 'abs'
+    
+    def __repr__(self):
+        return self.value
+
+
+class WipiFilterOperation(EnumBase, Enum):    
+    
+    """Enum listing supported operations for wipi filters."""
+
+    eq = 'eq'
+    ne = 'ne'
+    gt = 'gt'
+    lt = 'lt'
+    gte = 'gte'
+    lte = 'lte'
+    last = 'last'
+    
+    def __repr__(self):
+        return self.value
+
+
+class WipiFilterType(EnumBase, Enum):    
+    
+    """Enum listing supported wipi filter types."""
+
+    AND = 'AND'
+    OR = 'OR'
+    
+    def __repr__(self):
+        return self.value
+
+
+class ColumnOperation(Base):
         
-    """Object used to specify the column formatting"""
-       
+    """Object used to describe function chaining and column operations."""
+
+    @camel_case_translate
     def __init__(
         self,
-        precision: float,
-        unit=None,
-        human_readable: bool = None
+        column_names: Tuple[str, ...] = None,
+        function_name: str = None,
+        type_: str = None,
+        name: str = None
     ):        
         super().__init__()
-        self.precision = precision
-        self.unit = unit
-        self.human_readable = human_readable
+        self.column_names = column_names
+        self.function_name = function_name
+        self.__type = type_
+        self.name = name
 
     @property
-    def precision(self) -> float:
-        """Number of decimals to show"""
-        return self.__precision
+    def column_names(self) -> Tuple[str, ...]:
+        """Name of the columns to get results from in order and put into the given
+           function."""
+        return self.__column_names
 
-    @precision.setter
-    def precision(self, value: float):
-        self.__precision = value
-        self._property_changed('precision')        
-
-    @property
-    def unit(self):
-        """Unit to show next to number"""
-        return self.__unit
-
-    @unit.setter
-    def unit(self, value):
-        self.__unit = value
-        self._property_changed('unit')        
+    @column_names.setter
+    def column_names(self, value: Tuple[str, ...]):
+        self._property_changed('column_names')
+        self.__column_names = value        
 
     @property
-    def human_readable(self) -> bool:
-        """Formats number to have commas"""
-        return self.__human_readable
+    def function_name(self) -> str:
+        """Name of the function to pass column results into."""
+        return self.__function_name
 
-    @human_readable.setter
-    def human_readable(self, value: bool):
-        self.__human_readable = value
-        self._property_changed('human_readable')        
+    @function_name.setter
+    def function_name(self, value: str):
+        self._property_changed('function_name')
+        self.__function_name = value        
+
+    @property
+    def type(self) -> str:
+        """Type of inputs into the function. Series means pass the whole series into the
+           function, value means just gets the result of the column and pass it
+           into the given function"""
+        return self.__type
+
+    @type.setter
+    def type(self, value: str):
+        self._property_changed('type')
+        self.__type = value        
+
+
+class ColumnProperty(Base):
+        
+    """Object used to reference a column mapping"""
+
+    @camel_case_translate
+    def __init__(
+        self,
+        column_name: str = None,
+        property_: str = None,
+        name: str = None
+    ):        
+        super().__init__()
+        self.column_name = column_name
+        self.__property = property_
+        self.name = name
+
+    @property
+    def column_name(self) -> str:
+        """Name of the column to get property"""
+        return self.__column_name
+
+    @column_name.setter
+    def column_name(self, value: str):
+        self._property_changed('column_name')
+        self.__column_name = value        
+
+    @property
+    def property(self) -> str:
+        """Name of the property to get from column mapping"""
+        return self.__property
+
+    @property.setter
+    def property(self, value: str):
+        self._property_changed('property')
+        self.__property = value        
+
+
+class ExportParameters(Base):
+        
+    """Object with properties specifying how to export individual row or complete
+       monitor data."""
+
+    @camel_case_translate
+    def __init__(
+        self,
+        tokens: Tuple[str, ...],
+        data_set_id: str = None,
+        fields: Tuple[str, ...] = None,
+        label: str = None,
+        start_date: str = None,
+        name: str = None
+    ):        
+        super().__init__()
+        self.data_set_id = data_set_id
+        self.fields = fields
+        self.label = label
+        self.start_date = start_date
+        self.tokens = tokens
+        self.name = name
+
+    @property
+    def data_set_id(self) -> str:
+        """Id of the DataSet in which the export will retrieve data from."""
+        return self.__data_set_id
+
+    @data_set_id.setter
+    def data_set_id(self, value: str):
+        self._property_changed('data_set_id')
+        self.__data_set_id = value        
+
+    @property
+    def fields(self) -> Tuple[str, ...]:
+        """The fields to be exported from the DataSet."""
+        return self.__fields
+
+    @fields.setter
+    def fields(self, value: Tuple[str, ...]):
+        self._property_changed('fields')
+        self.__fields = value        
+
+    @property
+    def label(self) -> str:
+        """The label for the export button. For example: Export Historical Data."""
+        return self.__label
+
+    @label.setter
+    def label(self, value: str):
+        self._property_changed('label')
+        self.__label = value        
+
+    @property
+    def start_date(self) -> str:
+        """The relative start date for the history of data to retrieve. Eg: -1y."""
+        return self.__start_date
+
+    @start_date.setter
+    def start_date(self, value: str):
+        self._property_changed('start_date')
+        self.__start_date = value        
+
+    @property
+    def tokens(self) -> Tuple[str, ...]:
+        return self.__tokens
+
+    @tokens.setter
+    def tokens(self, value: Tuple[str, ...]):
+        self._property_changed('tokens')
+        self.__tokens = value        
+
+
+class FieldMap(Base):
+        
+    @camel_case_translate
+    def __init__(
+        self,
+        name: str = None
+    ):        
+        super().__init__()
+        self.name = name
 
 
 class FunctionParameters(Base):
         
     """Function parameters to be passed into the relevant gs_quant function."""
-       
+
+    @camel_case_translate
     def __init__(
         self,
         initial: int = None,
         obs: int = None,
-        returns_type=None,
-        type_=None,
+        returns_type: str = None,
+        type_: str = None,
         w: int = None,
-        entity_id: str = None
+        entity_id: str = None,
+        returns: bool = None,
+        name: str = None
     ):        
         super().__init__()
         self.initial = initial
@@ -86,6 +378,8 @@ class FunctionParameters(Base):
         self.__type = type_
         self.w = w
         self.entity_id = entity_id
+        self.returns = returns
+        self.name = name
 
     @property
     def initial(self) -> int:
@@ -94,8 +388,8 @@ class FunctionParameters(Base):
 
     @initial.setter
     def initial(self, value: int):
-        self.__initial = value
-        self._property_changed('initial')        
+        self._property_changed('initial')
+        self.__initial = value        
 
     @property
     def obs(self) -> int:
@@ -104,28 +398,28 @@ class FunctionParameters(Base):
 
     @obs.setter
     def obs(self, value: int):
-        self.__obs = value
-        self._property_changed('obs')        
+        self._property_changed('obs')
+        self.__obs = value        
 
     @property
-    def returns_type(self):
+    def returns_type(self) -> str:
         """returns type (simple, log)"""
         return self.__returns_type
 
     @returns_type.setter
-    def returns_type(self, value):
-        self.__returns_type = value
-        self._property_changed('returns_type')        
+    def returns_type(self, value: str):
+        self._property_changed('returns_type')
+        self.__returns_type = value        
 
     @property
-    def type(self):
+    def type(self) -> str:
         """returns type (simple, log)"""
         return self.__type
 
     @type.setter
-    def type(self, value):
-        self.__type = value
-        self._property_changed('type')        
+    def type(self, value: str):
+        self._property_changed('type')
+        self.__type = value        
 
     @property
     def w(self) -> int:
@@ -135,8 +429,8 @@ class FunctionParameters(Base):
 
     @w.setter
     def w(self, value: int):
-        self.__w = value
-        self._property_changed('w')        
+        self._property_changed('w')
+        self.__w = value        
 
     @property
     def entity_id(self) -> str:
@@ -146,66 +440,33 @@ class FunctionParameters(Base):
 
     @entity_id.setter
     def entity_id(self, value: str):
-        self.__entity_id = value
-        self._property_changed('entity_id')        
-
-
-class FunctionWhere(Base):
-        
-    """Parameters that will be passed into the data measure requests."""
-       
-    def __init__(
-        self,
-        participation_rate: float = None,
-        percent_adv: float = None,
-        strike_reference: str = None
-    ):        
-        super().__init__()
-        self.participation_rate = participation_rate
-        self.percent_adv = percent_adv
-        self.strike_reference = strike_reference
+        self._property_changed('entity_id')
+        self.__entity_id = value        
 
     @property
-    def participation_rate(self) -> float:
-        """Executed quantity over market volume (e.g. 5, 10, 20)."""
-        return self.__participation_rate
+    def returns(self) -> bool:
+        """Whether pb_total_return custom function returns the sum or typical returns."""
+        return self.__returns
 
-    @participation_rate.setter
-    def participation_rate(self, value: float):
-        self.__participation_rate = value
-        self._property_changed('participation_rate')        
-
-    @property
-    def percent_adv(self) -> float:
-        """Size of trade as percentage of average daily volume (e.g. .05, 1, 2, ..., 20)."""
-        return self.__percent_adv
-
-    @percent_adv.setter
-    def percent_adv(self, value: float):
-        self.__percent_adv = value
-        self._property_changed('percent_adv')        
-
-    @property
-    def strike_reference(self) -> str:
-        """Reference for strike level (enum: spot, forward)."""
-        return self.__strike_reference
-
-    @strike_reference.setter
-    def strike_reference(self, value: str):
-        self.__strike_reference = value
-        self._property_changed('strike_reference')        
+    @returns.setter
+    def returns(self, value: bool):
+        self._property_changed('returns')
+        self.__returns = value        
 
 
 class Historical(Base):
         
     """value and date for historical data"""
-       
+
+    @camel_case_translate
     def __init__(
         self,
-        value: Union[float, str] = None
+        value: Union[float, str] = None,
+        name: str = None
     ):        
         super().__init__()
         self.value = value
+        self.name = name
 
     @property
     def value(self) -> Union[float, str]:
@@ -213,22 +474,25 @@ class Historical(Base):
 
     @value.setter
     def value(self, value: Union[float, str]):
-        self.__value = value
-        self._property_changed('value')        
+        self._property_changed('value')
+        self.__value = value        
 
 
 class MonitorResponseData(Base):
         
     """Monitor calculated response data"""
-       
+
+    @camel_case_translate
     def __init__(
         self,
         id_: str,
-        result: dict
+        result: dict,
+        name: str = None
     ):        
         super().__init__()
         self.__id = id_
         self.result = result
+        self.name = name
 
     @property
     def id(self) -> str:
@@ -237,8 +501,8 @@ class MonitorResponseData(Base):
 
     @id.setter
     def id(self, value: str):
-        self.__id = value
-        self._property_changed('id')        
+        self._property_changed('id')
+        self.__id = value        
 
     @property
     def result(self) -> dict:
@@ -246,25 +510,28 @@ class MonitorResponseData(Base):
 
     @result.setter
     def result(self, value: dict):
-        self.__result = value
-        self._property_changed('result')        
+        self._property_changed('result')
+        self.__result = value        
 
 
 class Movers(Base):
         
     """Object that allows to specify the case in which we only want to return the n top
        or bottom entities"""
-       
+
+    @camel_case_translate
     def __init__(
         self,
         column_name: str,
         top: float = None,
-        bottom: float = None
+        bottom: float = None,
+        name: str = None
     ):        
         super().__init__()
         self.top = top
         self.bottom = bottom
         self.column_name = column_name
+        self.name = name
 
     @property
     def top(self) -> float:
@@ -273,8 +540,8 @@ class Movers(Base):
 
     @top.setter
     def top(self, value: float):
-        self.__top = value
-        self._property_changed('top')        
+        self._property_changed('top')
+        self.__top = value        
 
     @property
     def bottom(self) -> float:
@@ -283,8 +550,8 @@ class Movers(Base):
 
     @bottom.setter
     def bottom(self, value: float):
-        self.__bottom = value
-        self._property_changed('bottom')        
+        self._property_changed('bottom')
+        self.__bottom = value        
 
     @property
     def column_name(self) -> str:
@@ -293,34 +560,99 @@ class Movers(Base):
 
     @column_name.setter
     def column_name(self, value: str):
-        self.__column_name = value
-        self._property_changed('column_name')        
+        self._property_changed('column_name')
+        self.__column_name = value        
 
 
-class Sort(Base):
+class ColumnFormat(Base):
         
-    """Object used to define sorting"""
-       
+    """Object used to specify the column formatting"""
+
+    @camel_case_translate
     def __init__(
         self,
-        column_name: str,
-        type_=None,
-        direction=None
+        precision: float,
+        unit: Union[AvailableUnitTypes, str] = None,
+        human_readable: bool = None,
+        axis_key: str = None,
+        show_tooltip: bool = None,
+        name: str = None
     ):        
         super().__init__()
-        self.__type = type_
+        self.precision = precision
+        self.unit = unit
+        self.human_readable = human_readable
+        self.axis_key = axis_key
+        self.show_tooltip = show_tooltip
+        self.name = name
+
+    @property
+    def precision(self) -> float:
+        """Number of decimals to show"""
+        return self.__precision
+
+    @precision.setter
+    def precision(self, value: float):
+        self._property_changed('precision')
+        self.__precision = value        
+
+    @property
+    def unit(self) -> Union[AvailableUnitTypes, str]:
+        """Unit to show next to number"""
+        return self.__unit
+
+    @unit.setter
+    def unit(self, value: Union[AvailableUnitTypes, str]):
+        self._property_changed('unit')
+        self.__unit = get_enum_value(AvailableUnitTypes, value)        
+
+    @property
+    def human_readable(self) -> bool:
+        """Formats number to have commas"""
+        return self.__human_readable
+
+    @human_readable.setter
+    def human_readable(self, value: bool):
+        self._property_changed('human_readable')
+        self.__human_readable = value        
+
+    @property
+    def axis_key(self) -> str:
+        """Applicable for render type chart, determines line to be on the left or right
+           axis"""
+        return self.__axis_key
+
+    @axis_key.setter
+    def axis_key(self, value: str):
+        self._property_changed('axis_key')
+        self.__axis_key = value        
+
+    @property
+    def show_tooltip(self) -> bool:
+        """Whether to show the cell timestamp in a tooltip"""
+        return self.__show_tooltip
+
+    @show_tooltip.setter
+    def show_tooltip(self, value: bool):
+        self._property_changed('show_tooltip')
+        self.__show_tooltip = value        
+
+
+class ColumnMappings(Base):
+        
+    """Object used to map parameters to a column"""
+
+    @camel_case_translate
+    def __init__(
+        self,
+        column_name: str = None,
+        parameters: FieldMap = None,
+        name: str = None
+    ):        
+        super().__init__()
         self.column_name = column_name
-        self.direction = direction
-
-    @property
-    def type(self):
-        """Enum listing supported sort types"""
-        return self.__type
-
-    @type.setter
-    def type(self, value):
-        self.__type = value
-        self._property_changed('type')        
+        self.parameters = parameters
+        self.name = name
 
     @property
     def column_name(self) -> str:
@@ -329,87 +661,28 @@ class Sort(Base):
 
     @column_name.setter
     def column_name(self, value: str):
-        self.__column_name = value
-        self._property_changed('column_name')        
+        self._property_changed('column_name')
+        self.__column_name = value        
 
     @property
-    def direction(self):
-        """Enum with available sort directions"""
-        return self.__direction
+    def parameters(self) -> FieldMap:
+        return self.__parameters
 
-    @direction.setter
-    def direction(self, value):
-        self.__direction = value
-        self._property_changed('direction')        
-
-
-class WipiRequestFilter(Base):
-        
-    """A filter used for transforming data"""
-       
-    def __init__(
-        self,
-        column: str,
-        operation,
-        value: Union[float, str],
-        type_=None
-    ):        
-        super().__init__()
-        self.column = column
-        self.operation = operation
-        self.value = value
-        self.__type = type_
-
-    @property
-    def column(self) -> str:
-        """The column to perform the operation on."""
-        return self.__column
-
-    @column.setter
-    def column(self, value: str):
-        self.__column = value
-        self._property_changed('column')        
-
-    @property
-    def operation(self):
-        """Enum listing supported operations for wipi filters."""
-        return self.__operation
-
-    @operation.setter
-    def operation(self, value):
-        self.__operation = value
-        self._property_changed('operation')        
-
-    @property
-    def value(self) -> Union[float, str]:
-        """The value of the operation is used with. Relative dates are used against the
-           last valuationDate."""
-        return self.__value
-
-    @value.setter
-    def value(self, value: Union[float, str]):
-        self.__value = value
-        self._property_changed('value')        
-
-    @property
-    def type(self):
-        """Enum listing supported wipi filter types."""
-        return self.__type
-
-    @type.setter
-    def type(self, value):
-        self.__type = value
-        self._property_changed('type')        
+    @parameters.setter
+    def parameters(self, value: FieldMap):
+        self._property_changed('parameters')
+        self.__parameters = value        
 
 
 class Function(Base):
         
     """Function or Measure to be applied to the column."""
-       
+
+    @camel_case_translate
     def __init__(
         self,
         measure: str,
-        frequency,
+        frequency: str,
         name: str = None,
         start_date: str = None,
         end_date: str = None,
@@ -417,8 +690,9 @@ class Function(Base):
         end_time: str = None,
         fields: Tuple[str, ...] = None,
         parameters: FunctionParameters = None,
-        where: FunctionWhere = None,
-        vendor: str = None
+        where: FieldMap = None,
+        vendor: str = None,
+        data_set_id: str = None
     ):        
         super().__init__()
         self.name = name
@@ -432,6 +706,7 @@ class Function(Base):
         self.parameters = parameters
         self.where = where
         self.vendor = vendor
+        self.data_set_id = data_set_id
 
     @property
     def name(self) -> str:
@@ -440,8 +715,8 @@ class Function(Base):
 
     @name.setter
     def name(self, value: str):
-        self.__name = value
-        self._property_changed('name')        
+        self._property_changed('name')
+        self.__name = value        
 
     @property
     def measure(self) -> str:
@@ -450,19 +725,19 @@ class Function(Base):
 
     @measure.setter
     def measure(self, value: str):
-        self.__measure = value
-        self._property_changed('measure')        
+        self._property_changed('measure')
+        self.__measure = value        
 
     @property
-    def frequency(self):
+    def frequency(self) -> str:
         """The frequency of the column data changes which dataset the values are retrieved
            from."""
         return self.__frequency
 
     @frequency.setter
-    def frequency(self, value):
-        self.__frequency = value
-        self._property_changed('frequency')        
+    def frequency(self, value: str):
+        self._property_changed('frequency')
+        self.__frequency = value        
 
     @property
     def start_date(self) -> str:
@@ -471,8 +746,8 @@ class Function(Base):
 
     @start_date.setter
     def start_date(self, value: str):
-        self.__start_date = value
-        self._property_changed('start_date')        
+        self._property_changed('start_date')
+        self.__start_date = value        
 
     @property
     def end_date(self) -> str:
@@ -481,8 +756,8 @@ class Function(Base):
 
     @end_date.setter
     def end_date(self, value: str):
-        self.__end_date = value
-        self._property_changed('end_date')        
+        self._property_changed('end_date')
+        self.__end_date = value        
 
     @property
     def start_time(self) -> str:
@@ -491,8 +766,8 @@ class Function(Base):
 
     @start_time.setter
     def start_time(self, value: str):
-        self.__start_time = value
-        self._property_changed('start_time')        
+        self._property_changed('start_time')
+        self.__start_time = value        
 
     @property
     def end_time(self) -> str:
@@ -501,8 +776,8 @@ class Function(Base):
 
     @end_time.setter
     def end_time(self, value: str):
-        self.__end_time = value
-        self._property_changed('end_time')        
+        self._property_changed('end_time')
+        self.__end_time = value        
 
     @property
     def fields(self) -> Tuple[str, ...]:
@@ -511,8 +786,8 @@ class Function(Base):
 
     @fields.setter
     def fields(self, value: Tuple[str, ...]):
-        self.__fields = value
-        self._property_changed('fields')        
+        self._property_changed('fields')
+        self.__fields = value        
 
     @property
     def parameters(self) -> FunctionParameters:
@@ -521,18 +796,17 @@ class Function(Base):
 
     @parameters.setter
     def parameters(self, value: FunctionParameters):
-        self.__parameters = value
-        self._property_changed('parameters')        
+        self._property_changed('parameters')
+        self.__parameters = value        
 
     @property
-    def where(self) -> FunctionWhere:
-        """Parameters that will be passed into the data measure requests."""
+    def where(self) -> FieldMap:
         return self.__where
 
     @where.setter
-    def where(self, value: FunctionWhere):
-        self.__where = value
-        self._property_changed('where')        
+    def where(self, value: FieldMap):
+        self._property_changed('where')
+        self.__where = value        
 
     @property
     def vendor(self) -> str:
@@ -541,23 +815,35 @@ class Function(Base):
 
     @vendor.setter
     def vendor(self, value: str):
-        self.__vendor = value
-        self._property_changed('vendor')        
+        self._property_changed('vendor')
+        self.__vendor = value        
+
+    @property
+    def data_set_id(self) -> str:
+        """The name of a DataSet to directly query."""
+        return self.__data_set_id
+
+    @data_set_id.setter
+    def data_set_id(self, value: str):
+        self._property_changed('data_set_id')
+        self.__data_set_id = value        
 
 
 class RateRow(Base):
         
     """Rate row with calculated data"""
-       
+
+    @camel_case_translate
     def __init__(
         self,
-        period,
+        period: Union[ParameterPeriod, str],
         last: float,
         change: float,
         std: float,
         slope: float,
         historical: Historical = None,
-        percentage_change: float = None
+        percentage_change: float = None,
+        name: str = None
     ):        
         super().__init__()
         self.period = period
@@ -567,16 +853,17 @@ class RateRow(Base):
         self.percentage_change = percentage_change
         self.std = std
         self.slope = slope
+        self.name = name
 
     @property
-    def period(self):
+    def period(self) -> Union[ParameterPeriod, str]:
         """Calculated period"""
         return self.__period
 
     @period.setter
-    def period(self, value):
-        self.__period = value
-        self._property_changed('period')        
+    def period(self, value: Union[ParameterPeriod, str]):
+        self._property_changed('period')
+        self.__period = get_enum_value(ParameterPeriod, value)        
 
     @property
     def last(self) -> float:
@@ -585,8 +872,8 @@ class RateRow(Base):
 
     @last.setter
     def last(self, value: float):
-        self.__last = value
-        self._property_changed('last')        
+        self._property_changed('last')
+        self.__last = value        
 
     @property
     def historical(self) -> Historical:
@@ -595,8 +882,8 @@ class RateRow(Base):
 
     @historical.setter
     def historical(self, value: Historical):
-        self.__historical = value
-        self._property_changed('historical')        
+        self._property_changed('historical')
+        self.__historical = value        
 
     @property
     def change(self) -> float:
@@ -605,8 +892,8 @@ class RateRow(Base):
 
     @change.setter
     def change(self, value: float):
-        self.__change = value
-        self._property_changed('change')        
+        self._property_changed('change')
+        self.__change = value        
 
     @property
     def percentage_change(self) -> float:
@@ -615,8 +902,8 @@ class RateRow(Base):
 
     @percentage_change.setter
     def percentage_change(self, value: float):
-        self.__percentage_change = value
-        self._property_changed('percentage_change')        
+        self._property_changed('percentage_change')
+        self.__percentage_change = value        
 
     @property
     def std(self) -> float:
@@ -625,8 +912,8 @@ class RateRow(Base):
 
     @std.setter
     def std(self, value: float):
-        self.__std = value
-        self._property_changed('std')        
+        self._property_changed('std')
+        self.__std = value        
 
     @property
     def slope(self) -> float:
@@ -635,83 +922,142 @@ class RateRow(Base):
 
     @slope.setter
     def slope(self, value: float):
-        self.__slope = value
-        self._property_changed('slope')        
+        self._property_changed('slope')
+        self.__slope = value        
 
 
-class RowGroup(Base):
+class Sort(Base):
         
-    """Object specifying a group name and a list of assets to be calculated in a
-       monitor"""
-       
+    """Object used to define sorting"""
+
+    @camel_case_translate
     def __init__(
         self,
-        name: str,
-        entity_ids: Tuple[str, ...],
-        movers: Movers = None,
-        sort: Sort = None
+        column_name: str,
+        type_: Union[SortType, str] = None,
+        direction: Union[SortDirection, str] = None,
+        name: str = None
     ):        
         super().__init__()
+        self.__type = get_enum_value(SortType, type_)
+        self.column_name = column_name
+        self.direction = direction
         self.name = name
-        self.movers = movers
-        self.entity_ids = entity_ids
-        self.sort = sort
 
     @property
-    def name(self) -> str:
-        """Group name"""
-        return self.__name
+    def type(self) -> Union[SortType, str]:
+        """Enum listing supported sort types"""
+        return self.__type
 
-    @name.setter
-    def name(self, value: str):
-        self.__name = value
-        self._property_changed('name')        
-
-    @property
-    def movers(self) -> Movers:
-        """Object that allows to specify the case in which we only want to return the n top
-           or bottom entities"""
-        return self.__movers
-
-    @movers.setter
-    def movers(self, value: Movers):
-        self.__movers = value
-        self._property_changed('movers')        
+    @type.setter
+    def type(self, value: Union[SortType, str]):
+        self._property_changed('type')
+        self.__type = get_enum_value(SortType, value)        
 
     @property
-    def entity_ids(self) -> Tuple[str, ...]:
-        """Array of entities that belong to the group"""
-        return self.__entity_ids
+    def column_name(self) -> str:
+        """Required small string with a length from empty string to 50 characters"""
+        return self.__column_name
 
-    @entity_ids.setter
-    def entity_ids(self, value: Tuple[str, ...]):
-        self.__entity_ids = value
-        self._property_changed('entity_ids')        
+    @column_name.setter
+    def column_name(self, value: str):
+        self._property_changed('column_name')
+        self.__column_name = value        
 
     @property
-    def sort(self) -> Sort:
-        """Object used to define sorting"""
-        return self.__sort
+    def direction(self) -> Union[SortDirection, str]:
+        """Enum with available sort directions"""
+        return self.__direction
 
-    @sort.setter
-    def sort(self, value: Sort):
-        self.__sort = value
-        self._property_changed('sort')        
+    @direction.setter
+    def direction(self, value: Union[SortDirection, str]):
+        self._property_changed('direction')
+        self.__direction = get_enum_value(SortDirection, value)        
+
+
+class WipiRequestFilter(Base):
+        
+    """A filter used for transforming data"""
+
+    @camel_case_translate
+    def __init__(
+        self,
+        column: str,
+        operation: Union[WipiFilterOperation, str],
+        value: Union[float, str],
+        type_: Union[WipiFilterType, str] = None,
+        name: str = None
+    ):        
+        super().__init__()
+        self.column = column
+        self.operation = operation
+        self.value = value
+        self.__type = get_enum_value(WipiFilterType, type_)
+        self.name = name
+
+    @property
+    def column(self) -> str:
+        """The column to perform the operation on."""
+        return self.__column
+
+    @column.setter
+    def column(self, value: str):
+        self._property_changed('column')
+        self.__column = value        
+
+    @property
+    def operation(self) -> Union[WipiFilterOperation, str]:
+        """Enum listing supported operations for wipi filters."""
+        return self.__operation
+
+    @operation.setter
+    def operation(self, value: Union[WipiFilterOperation, str]):
+        self._property_changed('operation')
+        self.__operation = get_enum_value(WipiFilterOperation, value)        
+
+    @property
+    def value(self) -> Union[float, str]:
+        """The value of the operation is used with. Relative dates are used against the
+           last valuationDate."""
+        return self.__value
+
+    @value.setter
+    def value(self, value: Union[float, str]):
+        self._property_changed('value')
+        self.__value = value        
+
+    @property
+    def type(self) -> Union[WipiFilterType, str]:
+        """Enum listing supported wipi filter types."""
+        return self.__type
+
+    @type.setter
+    def type(self, value: Union[WipiFilterType, str]):
+        self._property_changed('type')
+        self.__type = get_enum_value(WipiFilterType, value)        
 
 
 class ColumnDefinition(Base):
         
     """Object defining the columns to be calculated in the monitor"""
-       
+
+    @camel_case_translate
     def __init__(
         self,
-        render,
+        render: Union[ParameterRender, str],
         name: str,
         enable_cell_flashing: bool = None,
-        entity_property=None,
+        entity_property: Union[AssetProperties, str] = None,
         function: Function = None,
         format_: ColumnFormat = None,
-        width: float = None
+        width: float = None,
+        column_property: ColumnProperty = None,
+        column_operation: ColumnOperation = None,
+        expression: str = None,
+        expressions: Tuple[str, ...] = None,
+        start_date: str = None,
+        end_date: str = None,
+        tooltip: str = None
     ):        
         super().__init__()
         self.enable_cell_flashing = enable_cell_flashing
@@ -721,6 +1067,13 @@ class ColumnDefinition(Base):
         self.function = function
         self.__format = format_
         self.width = width
+        self.column_property = column_property
+        self.column_operation = column_operation
+        self.expression = expression
+        self.expressions = expressions
+        self.start_date = start_date
+        self.end_date = end_date
+        self.tooltip = tooltip
 
     @property
     def enable_cell_flashing(self) -> bool:
@@ -729,8 +1082,8 @@ class ColumnDefinition(Base):
 
     @enable_cell_flashing.setter
     def enable_cell_flashing(self, value: bool):
-        self.__enable_cell_flashing = value
-        self._property_changed('enable_cell_flashing')        
+        self._property_changed('enable_cell_flashing')
+        self.__enable_cell_flashing = value        
 
     @property
     def name(self) -> str:
@@ -739,28 +1092,28 @@ class ColumnDefinition(Base):
 
     @name.setter
     def name(self, value: str):
-        self.__name = value
-        self._property_changed('name')        
+        self._property_changed('name')
+        self.__name = value        
 
     @property
-    def render(self):
+    def render(self) -> Union[ParameterRender, str]:
         """Enum listing supported column definition render types"""
         return self.__render
 
     @render.setter
-    def render(self, value):
-        self.__render = value
-        self._property_changed('render')        
+    def render(self, value: Union[ParameterRender, str]):
+        self._property_changed('render')
+        self.__render = get_enum_value(ParameterRender, value)        
 
     @property
-    def entity_property(self):
+    def entity_property(self) -> Union[AssetProperties, str]:
         """Property to fetch from an entity"""
         return self.__entity_property
 
     @entity_property.setter
-    def entity_property(self, value):
-        self.__entity_property = value
-        self._property_changed('entity_property')        
+    def entity_property(self, value: Union[AssetProperties, str]):
+        self._property_changed('entity_property')
+        self.__entity_property = get_enum_value(AssetProperties, value)        
 
     @property
     def function(self) -> Function:
@@ -769,8 +1122,8 @@ class ColumnDefinition(Base):
 
     @function.setter
     def function(self, value: Function):
-        self.__function = value
-        self._property_changed('function')        
+        self._property_changed('function')
+        self.__function = value        
 
     @property
     def format(self) -> ColumnFormat:
@@ -779,8 +1132,8 @@ class ColumnDefinition(Base):
 
     @format.setter
     def format(self, value: ColumnFormat):
-        self.__format = value
-        self._property_changed('format')        
+        self._property_changed('format')
+        self.__format = value        
 
     @property
     def width(self) -> float:
@@ -789,17 +1142,125 @@ class ColumnDefinition(Base):
 
     @width.setter
     def width(self, value: float):
-        self.__width = value
-        self._property_changed('width')        
+        self._property_changed('width')
+        self.__width = value        
+
+    @property
+    def column_property(self) -> ColumnProperty:
+        """Column name"""
+        return self.__column_property
+
+    @column_property.setter
+    def column_property(self, value: ColumnProperty):
+        self._property_changed('column_property')
+        self.__column_property = value        
+
+    @property
+    def column_operation(self) -> ColumnOperation:
+        """Object that describes function chaining and operations."""
+        return self.__column_operation
+
+    @column_operation.setter
+    def column_operation(self, value: ColumnOperation):
+        self._property_changed('column_operation')
+        self.__column_operation = value        
+
+    @property
+    def expression(self) -> str:
+        """String that represents the column in the form of a PlotTool expression."""
+        return self.__expression
+
+    @expression.setter
+    def expression(self, value: str):
+        self._property_changed('expression')
+        self.__expression = value        
+
+    @property
+    def expressions(self) -> Tuple[str, ...]:
+        """Array of PlotTool Expressions for /v1/plots/expansionRunner"""
+        return self.__expressions
+
+    @expressions.setter
+    def expressions(self, value: Tuple[str, ...]):
+        self._property_changed('expressions')
+        self.__expressions = value        
+
+    @property
+    def start_date(self) -> str:
+        """String that represents the start date for expressions."""
+        return self.__start_date
+
+    @start_date.setter
+    def start_date(self, value: str):
+        self._property_changed('start_date')
+        self.__start_date = value        
+
+    @property
+    def end_date(self) -> str:
+        """String that represents the end date for expressions"""
+        return self.__end_date
+
+    @end_date.setter
+    def end_date(self, value: str):
+        self._property_changed('end_date')
+        self.__end_date = value        
+
+    @property
+    def tooltip(self) -> str:
+        """Tooltip that is displayed on the column header"""
+        return self.__tooltip
+
+    @tooltip.setter
+    def tooltip(self, value: str):
+        self._property_changed('tooltip')
+        self.__tooltip = value        
+
+
+class EntityId(Base):
+        
+    """Object used to define entities"""
+
+    @camel_case_translate
+    def __init__(
+        self,
+        id_: str = None,
+        column_mappings: Tuple[ColumnMappings, ...] = None,
+        name: str = None
+    ):        
+        super().__init__()
+        self.__id = id_
+        self.column_mappings = column_mappings
+        self.name = name
+
+    @property
+    def id(self) -> str:
+        """Marquee unique identifier"""
+        return self.__id
+
+    @id.setter
+    def id(self, value: str):
+        self._property_changed('id')
+        self.__id = value        
+
+    @property
+    def column_mappings(self) -> Tuple[ColumnMappings, ...]:
+        """Array of column mappings for the entity"""
+        return self.__column_mappings
+
+    @column_mappings.setter
+    def column_mappings(self, value: Tuple[ColumnMappings, ...]):
+        self._property_changed('column_mappings')
+        self.__column_mappings = value        
 
 
 class RatesResponseData(Base):
         
     """Rates calculated response data."""
-       
+
+    @camel_case_translate
     def __init__(
         self,
-        name,
+        name: Union[RateIds, str],
         id_: str,
         rows: Tuple[RateRow, ...],
         libor_id: str = None
@@ -811,14 +1272,14 @@ class RatesResponseData(Base):
         self.rows = rows
 
     @property
-    def name(self):
+    def name(self) -> Union[RateIds, str]:
         """Enum listing supported rate ids"""
         return self.__name
 
     @name.setter
-    def name(self, value):
-        self.__name = value
-        self._property_changed('name')        
+    def name(self, value: Union[RateIds, str]):
+        self._property_changed('name')
+        self.__name = get_enum_value(RateIds, value)        
 
     @property
     def id(self) -> str:
@@ -827,8 +1288,8 @@ class RatesResponseData(Base):
 
     @id.setter
     def id(self, value: str):
-        self.__id = value
-        self._property_changed('id')        
+        self._property_changed('id')
+        self.__id = value        
 
     @property
     def libor_id(self) -> str:
@@ -837,8 +1298,8 @@ class RatesResponseData(Base):
 
     @libor_id.setter
     def libor_id(self, value: str):
-        self.__libor_id = value
-        self._property_changed('libor_id')        
+        self._property_changed('libor_id')
+        self.__libor_id = value        
 
     @property
     def rows(self) -> Tuple[RateRow, ...]:
@@ -847,14 +1308,89 @@ class RatesResponseData(Base):
 
     @rows.setter
     def rows(self, value: Tuple[RateRow, ...]):
-        self.__rows = value
-        self._property_changed('rows')        
+        self._property_changed('rows')
+        self.__rows = value        
+
+
+class RowGroup(Base):
+        
+    """Object specifying a group name and a list of assets to be calculated in a
+       monitor"""
+
+    @camel_case_translate
+    def __init__(
+        self,
+        name: str,
+        entity_ids: Tuple[EntityId, ...],
+        movers: Movers = None,
+        sort: Sort = None,
+        export: ExportParameters = None
+    ):        
+        super().__init__()
+        self.name = name
+        self.movers = movers
+        self.entity_ids = entity_ids
+        self.sort = sort
+        self.export = export
+
+    @property
+    def name(self) -> str:
+        """Group name"""
+        return self.__name
+
+    @name.setter
+    def name(self, value: str):
+        self._property_changed('name')
+        self.__name = value        
+
+    @property
+    def movers(self) -> Movers:
+        """Object that allows to specify the case in which we only want to return the n top
+           or bottom entities"""
+        return self.__movers
+
+    @movers.setter
+    def movers(self, value: Movers):
+        self._property_changed('movers')
+        self.__movers = value        
+
+    @property
+    def entity_ids(self) -> Tuple[EntityId, ...]:
+        """Array of entity objects that belong to the group"""
+        return self.__entity_ids
+
+    @entity_ids.setter
+    def entity_ids(self, value: Tuple[EntityId, ...]):
+        self._property_changed('entity_ids')
+        self.__entity_ids = value        
+
+    @property
+    def sort(self) -> Sort:
+        """Object used to define sorting"""
+        return self.__sort
+
+    @sort.setter
+    def sort(self, value: Sort):
+        self._property_changed('sort')
+        self.__sort = value        
+
+    @property
+    def export(self) -> ExportParameters:
+        """Object with properties specifying how to export individual row or complete
+           monitor data."""
+        return self.__export
+
+    @export.setter
+    def export(self, value: ExportParameters):
+        self._property_changed('export')
+        self.__export = value        
 
 
 class MonitorParameters(Base):
         
     """Parameters provided for a monitor"""
-       
+
+    @camel_case_translate
     def __init__(
         self,
         column_definitions: Tuple[ColumnDefinition, ...],
@@ -868,8 +1404,14 @@ class MonitorParameters(Base):
         rebase_to_end_of_year_spot: bool = None,
         filters: Tuple[WipiRequestFilter, ...] = None,
         exportable: Tuple[str, ...] = None,
+        export: ExportParameters = None,
         fill_column_index: float = None,
-        knot: float = None
+        knot: float = None,
+        default_hidden: bool = None,
+        line_chart_color: str = None,
+        chart_curve_type: str = None,
+        ignore_business_day_logic: bool = None,
+        name: str = None
     ):        
         super().__init__()
         self.column_definitions = column_definitions
@@ -883,8 +1425,14 @@ class MonitorParameters(Base):
         self.rebase_to_end_of_year_spot = rebase_to_end_of_year_spot
         self.filters = filters
         self.exportable = exportable
+        self.export = export
         self.fill_column_index = fill_column_index
         self.knot = knot
+        self.default_hidden = default_hidden
+        self.line_chart_color = line_chart_color
+        self.chart_curve_type = chart_curve_type
+        self.ignore_business_day_logic = ignore_business_day_logic
+        self.name = name
 
     @property
     def column_definitions(self) -> Tuple[ColumnDefinition, ...]:
@@ -893,8 +1441,8 @@ class MonitorParameters(Base):
 
     @column_definitions.setter
     def column_definitions(self, value: Tuple[ColumnDefinition, ...]):
-        self.__column_definitions = value
-        self._property_changed('column_definitions')        
+        self._property_changed('column_definitions')
+        self.__column_definitions = value        
 
     @property
     def row_groups(self) -> Tuple[RowGroup, ...]:
@@ -903,8 +1451,8 @@ class MonitorParameters(Base):
 
     @row_groups.setter
     def row_groups(self, value: Tuple[RowGroup, ...]):
-        self.__row_groups = value
-        self._property_changed('row_groups')        
+        self._property_changed('row_groups')
+        self.__row_groups = value        
 
     @property
     def data_set_id(self) -> str:
@@ -913,8 +1461,8 @@ class MonitorParameters(Base):
 
     @data_set_id.setter
     def data_set_id(self, value: str):
-        self.__data_set_id = value
-        self._property_changed('data_set_id')        
+        self._property_changed('data_set_id')
+        self.__data_set_id = value        
 
     @property
     def rebase_to_spot(self) -> bool:
@@ -923,8 +1471,8 @@ class MonitorParameters(Base):
 
     @rebase_to_spot.setter
     def rebase_to_spot(self, value: bool):
-        self.__rebase_to_spot = value
-        self._property_changed('rebase_to_spot')        
+        self._property_changed('rebase_to_spot')
+        self.__rebase_to_spot = value        
 
     @property
     def rebase_historical_curve(self) -> bool:
@@ -933,8 +1481,8 @@ class MonitorParameters(Base):
 
     @rebase_historical_curve.setter
     def rebase_historical_curve(self, value: bool):
-        self.__rebase_historical_curve = value
-        self._property_changed('rebase_historical_curve')        
+        self._property_changed('rebase_historical_curve')
+        self.__rebase_historical_curve = value        
 
     @property
     def meeting_after_next(self) -> bool:
@@ -944,8 +1492,8 @@ class MonitorParameters(Base):
 
     @meeting_after_next.setter
     def meeting_after_next(self, value: bool):
-        self.__meeting_after_next = value
-        self._property_changed('meeting_after_next')        
+        self._property_changed('meeting_after_next')
+        self.__meeting_after_next = value        
 
     @property
     def next_meeting(self) -> bool:
@@ -955,8 +1503,8 @@ class MonitorParameters(Base):
 
     @next_meeting.setter
     def next_meeting(self, value: bool):
-        self.__next_meeting = value
-        self._property_changed('next_meeting')        
+        self._property_changed('next_meeting')
+        self.__next_meeting = value        
 
     @property
     def last_meeting(self) -> bool:
@@ -966,8 +1514,8 @@ class MonitorParameters(Base):
 
     @last_meeting.setter
     def last_meeting(self, value: bool):
-        self.__last_meeting = value
-        self._property_changed('last_meeting')        
+        self._property_changed('last_meeting')
+        self.__last_meeting = value        
 
     @property
     def rebase_to_end_of_year_spot(self) -> bool:
@@ -976,8 +1524,8 @@ class MonitorParameters(Base):
 
     @rebase_to_end_of_year_spot.setter
     def rebase_to_end_of_year_spot(self, value: bool):
-        self.__rebase_to_end_of_year_spot = value
-        self._property_changed('rebase_to_end_of_year_spot')        
+        self._property_changed('rebase_to_end_of_year_spot')
+        self.__rebase_to_end_of_year_spot = value        
 
     @property
     def filters(self) -> Tuple[WipiRequestFilter, ...]:
@@ -986,18 +1534,29 @@ class MonitorParameters(Base):
 
     @filters.setter
     def filters(self, value: Tuple[WipiRequestFilter, ...]):
-        self.__filters = value
-        self._property_changed('filters')        
+        self._property_changed('filters')
+        self.__filters = value        
 
     @property
     def exportable(self) -> Tuple[str, ...]:
-        """Permission to export monitor data."""
+        """Permission to export monitor data. This will be deprecated for export."""
         return self.__exportable
 
     @exportable.setter
     def exportable(self, value: Tuple[str, ...]):
-        self.__exportable = value
-        self._property_changed('exportable')        
+        self._property_changed('exportable')
+        self.__exportable = value        
+
+    @property
+    def export(self) -> ExportParameters:
+        """Object with properties specifying how to export individual row or complete
+           monitor data."""
+        return self.__export
+
+    @export.setter
+    def export(self, value: ExportParameters):
+        self._property_changed('export')
+        self.__export = value        
 
     @property
     def fill_column_index(self) -> float:
@@ -1007,8 +1566,8 @@ class MonitorParameters(Base):
 
     @fill_column_index.setter
     def fill_column_index(self, value: float):
-        self.__fill_column_index = value
-        self._property_changed('fill_column_index')        
+        self._property_changed('fill_column_index')
+        self.__fill_column_index = value        
 
     @property
     def knot(self) -> float:
@@ -1019,18 +1578,61 @@ class MonitorParameters(Base):
 
     @knot.setter
     def knot(self, value: float):
-        self.__knot = value
-        self._property_changed('knot')        
+        self._property_changed('knot')
+        self.__knot = value        
+
+    @property
+    def default_hidden(self) -> bool:
+        """On workspaces, monitors may be hidden by default. True will by default hide this
+           monitor. For example, used in workspaces with multi charts."""
+        return self.__default_hidden
+
+    @default_hidden.setter
+    def default_hidden(self, value: bool):
+        self._property_changed('default_hidden')
+        self.__default_hidden = value        
+
+    @property
+    def line_chart_color(self) -> str:
+        """On monitors that render line charts, for example Central Bank Watch curves, this
+           will enforce the line color."""
+        return self.__line_chart_color
+
+    @line_chart_color.setter
+    def line_chart_color(self, value: str):
+        self._property_changed('line_chart_color')
+        self.__line_chart_color = value        
+
+    @property
+    def chart_curve_type(self) -> str:
+        """The curve type of the chart line."""
+        return self.__chart_curve_type
+
+    @chart_curve_type.setter
+    def chart_curve_type(self, value: str):
+        self._property_changed('chart_curve_type')
+        self.__chart_curve_type = value        
+
+    @property
+    def ignore_business_day_logic(self) -> bool:
+        """Whether or not to apply business day logic for relative dates."""
+        return self.__ignore_business_day_logic
+
+    @ignore_business_day_logic.setter
+    def ignore_business_day_logic(self, value: bool):
+        self._property_changed('ignore_business_day_logic')
+        self.__ignore_business_day_logic = value        
 
 
 class Monitor(Base):
         
     """A marquee monitor object"""
-       
+
+    @camel_case_translate
     def __init__(
         self,
         name: str,
-        type_,
+        type_: Union[EntitiesSupported, str],
         id_: str = None,
         parameters: MonitorParameters = None,
         created_time: datetime.datetime = None,
@@ -1046,7 +1648,7 @@ class Monitor(Base):
         super().__init__()
         self.__id = id_
         self.name = name
-        self.__type = type_
+        self.__type = get_enum_value(EntitiesSupported, type_)
         self.parameters = parameters
         self.created_time = created_time
         self.last_updated_time = last_updated_time
@@ -1065,8 +1667,8 @@ class Monitor(Base):
 
     @id.setter
     def id(self, value: str):
-        self.__id = value
-        self._property_changed('id')        
+        self._property_changed('id')
+        self.__id = value        
 
     @property
     def name(self) -> str:
@@ -1075,18 +1677,18 @@ class Monitor(Base):
 
     @name.setter
     def name(self, value: str):
-        self.__name = value
-        self._property_changed('name')        
+        self._property_changed('name')
+        self.__name = value        
 
     @property
-    def type(self):
+    def type(self) -> Union[EntitiesSupported, str]:
         """Enum listing supported entities"""
         return self.__type
 
     @type.setter
-    def type(self, value):
-        self.__type = value
-        self._property_changed('type')        
+    def type(self, value: Union[EntitiesSupported, str]):
+        self._property_changed('type')
+        self.__type = get_enum_value(EntitiesSupported, value)        
 
     @property
     def parameters(self) -> MonitorParameters:
@@ -1095,8 +1697,8 @@ class Monitor(Base):
 
     @parameters.setter
     def parameters(self, value: MonitorParameters):
-        self.__parameters = value
-        self._property_changed('parameters')        
+        self._property_changed('parameters')
+        self.__parameters = value        
 
     @property
     def created_time(self) -> datetime.datetime:
@@ -1105,8 +1707,8 @@ class Monitor(Base):
 
     @created_time.setter
     def created_time(self, value: datetime.datetime):
-        self.__created_time = value
-        self._property_changed('created_time')        
+        self._property_changed('created_time')
+        self.__created_time = value        
 
     @property
     def last_updated_time(self) -> datetime.datetime:
@@ -1115,8 +1717,8 @@ class Monitor(Base):
 
     @last_updated_time.setter
     def last_updated_time(self, value: datetime.datetime):
-        self.__last_updated_time = value
-        self._property_changed('last_updated_time')        
+        self._property_changed('last_updated_time')
+        self.__last_updated_time = value        
 
     @property
     def created_by_id(self) -> str:
@@ -1125,8 +1727,8 @@ class Monitor(Base):
 
     @created_by_id.setter
     def created_by_id(self, value: str):
-        self.__created_by_id = value
-        self._property_changed('created_by_id')        
+        self._property_changed('created_by_id')
+        self.__created_by_id = value        
 
     @property
     def last_updated_by_id(self) -> str:
@@ -1135,8 +1737,8 @@ class Monitor(Base):
 
     @last_updated_by_id.setter
     def last_updated_by_id(self, value: str):
-        self.__last_updated_by_id = value
-        self._property_changed('last_updated_by_id')        
+        self._property_changed('last_updated_by_id')
+        self.__last_updated_by_id = value        
 
     @property
     def owner_id(self) -> str:
@@ -1145,8 +1747,8 @@ class Monitor(Base):
 
     @owner_id.setter
     def owner_id(self, value: str):
-        self.__owner_id = value
-        self._property_changed('owner_id')        
+        self._property_changed('owner_id')
+        self.__owner_id = value        
 
     @property
     def entitlements(self) -> Entitlements:
@@ -1155,8 +1757,8 @@ class Monitor(Base):
 
     @entitlements.setter
     def entitlements(self, value: Entitlements):
-        self.__entitlements = value
-        self._property_changed('entitlements')        
+        self._property_changed('entitlements')
+        self.__entitlements = value        
 
     @property
     def folder_name(self) -> str:
@@ -1165,18 +1767,19 @@ class Monitor(Base):
 
     @folder_name.setter
     def folder_name(self, value: str):
-        self.__folder_name = value
-        self._property_changed('folder_name')        
+        self._property_changed('folder_name')
+        self.__folder_name = value        
 
     @property
     def polling_time(self) -> float:
-        """Polling time to use in milliseconds."""
+        """Polling time to use in milliseconds. A polling time of zero denotes no
+           streaming."""
         return self.__polling_time
 
     @polling_time.setter
     def polling_time(self, value: float):
-        self.__polling_time = value
-        self._property_changed('polling_time')        
+        self._property_changed('polling_time')
+        self.__polling_time = value        
 
     @property
     def tags(self) -> Tuple[str, ...]:
@@ -1185,5 +1788,5 @@ class Monitor(Base):
 
     @tags.setter
     def tags(self, value: Tuple[str, ...]):
-        self.__tags = value
-        self._property_changed('tags')        
+        self._property_changed('tags')
+        self.__tags = value        

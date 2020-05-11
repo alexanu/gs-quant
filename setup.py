@@ -13,12 +13,12 @@ KIND, either express or implied.  See the License for the
 specific language governing permissions and limitations
 under the License.
 """
-
 import os
 import setuptools
 import shutil
 import subprocess
 import sys
+import versioneer
 from pathlib import Path
 
 if "sdist" in sys.argv:
@@ -40,7 +40,8 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="gs_quant",
-    version="0.8.70",
+    version=versioneer.get_version(),
+    cmdclass=versioneer.get_cmdclass(),
     author="Goldman Sachs",
     author_email="developer@gs.com",
     description="Goldman Sachs Quant",
@@ -55,21 +56,27 @@ setuptools.setup(
         "backoff",
         "cachetools",
         "configparser",
+        "dataclasses;python_version<'3.7'",
         "funcsigs",
         "future",
         "inflection",
+        "lmfit",
         "msgpack",
+        "nest-asyncio",
         "pandas",
         "python-dateutil>=2.7.0",
         "requests",
         "scipy",
         "six",
-        "typing;python_version<'3.7'"
+        "statsmodels",
+        "typing;python_version<'3.7'",
+        "websockets",
+        "pydash"
     ],
     extras_require={
         "internal": ["gs_quant_internal>=0.4.1", "requests_kerberos"],
         "notebook": ["jupyter", "matplotlib~=2.1.0", "pprint"],
-        "test": ["pytest", "pytest-cov", "pytest-mock", "testfixtures"],
+        "test": ["pytest", "pytest-cov", "pytest-mock", "testfixtures", "nbconvert", "nbformat", "jupyter_client"],
         "develop": ["wheel", "sphinx", "sphinx_rtd_theme", "sphinx_autodoc_typehints", "pytest", "pytest-cov",
                     "pytest-mock", "testfixtures"]
     },

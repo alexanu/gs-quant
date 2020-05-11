@@ -12,13 +12,20 @@ Algebra
 
    abs_
    add
+   and_
    ceil
    divide
-   exp 
+   exp
+   filter_
    floor
+   floordiv
+   if_
    log
    multiply
+   not_
+   or_
    power
+   repeat
    sqrt
    subtract
 
@@ -38,8 +45,19 @@ Analysis
    lag
 
 
+Backtesting
+-----------
+
+.. currentmodule:: gs_quant.timeseries.backtesting
+
+.. autosummary::
+   :toctree: functions
+
+   basket
+
+
 Date / Time
-------------
+-----------
 
 
 .. currentmodule:: gs_quant.timeseries.datetime
@@ -55,6 +73,7 @@ Date / Time
    month
    year
    quarter
+   date_range
 
 
 Econometrics
@@ -74,6 +93,7 @@ Econometrics
    max_drawdown
    prices
    returns
+   sharpe_ratio
    volatility
 
 
@@ -92,6 +112,7 @@ Statistics
    median   
    min_
    mode
+   percentile
    percentiles
    product
    range_
@@ -101,6 +122,11 @@ Statistics
    winsorize
    zscores
 
+.. autosummary::
+   :toctree: classes
+
+   SIRModel
+   SEIRModel
 
 Technical Analysis
 ------------------
@@ -113,4 +139,5 @@ Technical Analysis
 
    bollinger_bands
    moving_average
+   exponential_moving_average
    

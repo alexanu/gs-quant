@@ -13,11 +13,15 @@ KIND, either express or implied.  See the License for the
 specific language governing permissions and limitations
 under the License.
 """
+import os
+from unittest.mock import Mock
 
 import pytest
 from pandas.util.testing import assert_series_equal
+from testfixtures import Replacer
 
 from gs_quant.timeseries import *
+from gs_quant.timeseries.econometrics import _get_ratio
 
 
 def test_returns():
@@ -55,6 +59,14 @@ def test_returns():
     expected = pd.Series([np.nan, np.nan, 0.029753, -0.0004, -0.020203, 0.019803], index=dates)
     assert_series_equal(result, expected, obj="Logarithmic returns", check_less_precise=True)
 
+    result = returns(x, 1, Returns.ABSOLUTE)
+    expected = pd.Series([np.nan, 1.0, 2.02, -2.0604, 0.0, 2.019192], index=dates)
+    assert_series_equal(result, expected, obj="Absolute returns", check_less_precise=True)
+
+    result = returns(x, 2, Returns.ABSOLUTE)
+    expected = pd.Series([np.nan, np.nan, 3.02, -0.0404, -2.0604, 2.019192], index=dates)
+    assert_series_equal(result, expected, obj="Absolute returns", check_less_precise=True)
+
     with pytest.raises(MqValueError):
         returns(x, 1, "None")
 
@@ -91,6 +103,12 @@ def test_prices():
     result = prices(r, 100, Returns.LOGARITHMIC)
     expected = pd.Series([100.0, 101, 103.02, 100.9596, 100.9596, 102.978792], index=dates)
     assert_series_equal(result, expected, obj="Logarithmic prices series", check_less_precise=True)
+
+    r = pd.Series([np.nan, 1.0, 2.02, -2.0604, 0.0, 2.019192], index=dates)
+
+    result = prices(r, 100, Returns.ABSOLUTE)
+    expected = pd.Series([100.0, 101, 103.02, 100.9596, 100.9596, 102.978792], index=dates)
+    assert_series_equal(result, expected, obj="Absolute prices series", check_less_precise=True)
 
     with pytest.raises(MqValueError):
         prices(r, 1, "None")
@@ -274,8 +292,8 @@ def test_correlation():
         date(2019, 1, 2),
         date(2019, 1, 3),
         date(2019, 1, 4),
-        date(2019, 1, 5),
-        date(2019, 1, 6),
+        date(2019, 1, 7),
+        date(2019, 1, 8),
     ]
 
     x = pd.Series([100.0, 101, 103.02, 100.9596, 100.9596, 102.978792], index=daily_dates)
@@ -310,6 +328,11 @@ def test_correlation():
 
     assert_series_equal(result, expected, check_less_precise=True)
 
+    result = correlation(x, y, Window('2d', 0))
+    expected = pd.Series([np.nan, np.nan, -1.0, 1.0, np.nan, -1.0], index=daily_dates)
+
+    assert_series_equal(result, expected, check_less_precise=True)
+
 
 def test_beta():
     x = pd.Series([])
@@ -321,8 +344,8 @@ def test_beta():
         date(2019, 1, 2),
         date(2019, 1, 3),
         date(2019, 1, 4),
-        date(2019, 1, 5),
-        date(2019, 1, 6),
+        date(2019, 1, 7),
+        date(2019, 1, 8),
     ]
 
     x = pd.Series([100.0, 101, 103.02, 100.9596, 100.9596, 102.978792], index=daily_dates)
@@ -355,15 +378,90 @@ def test_beta():
 
     assert_series_equal(result, expected, check_less_precise=True)
 
+    result = beta(x, y, Window('2d', 0))
+    expected = pd.Series([np.nan, np.nan, np.nan, 0.8255252918287954,
+                          np.nan, -2.24327163719368], index=daily_dates)
+
+    assert_series_equal(result, expected, check_less_precise=True)
+
 
 def test_max_drawdown():
-    series = pd.Series([1, 5, 5, 4, 4, 1])
+    daily_dates = [
+        date(2019, 1, 1),
+        date(2019, 1, 2),
+        date(2019, 1, 3),
+        date(2019, 1, 4),
+        date(2019, 1, 7),
+        date(2019, 1, 8),
+    ]
 
-    basic_output = max_drawdown(series)
-    assert_series_equal(basic_output, pd.Series([0.0, 0.0, 0.0, -0.2, -0.2, -0.8]), obj="Max drawdown")
+    series = pd.Series([1, 5, 5, 4, 4, 1], index=daily_dates)
 
-    output_window = max_drawdown(series, Window(2, 0))
-    assert_series_equal(output_window, pd.Series([0.0, 0.0, 0.0, -0.2, -0.2, -0.75]), obj="Max drawdown window")
+    result = max_drawdown(series)
+    expected = pd.Series([0.0, 0.0, 0.0, -0.2, -0.2, -0.8], index=daily_dates)
+    assert_series_equal(result, expected, obj="Max drawdown")
+
+    result = max_drawdown(series, Window(2, 0))
+    expected = pd.Series([0.0, 0.0, 0.0, -0.2, -0.2, -0.75], index=daily_dates)
+    assert_series_equal(result, expected, obj="Max drawdown window 2")
+
+    result = max_drawdown(series, Window('2d', 0))
+    expected = pd.Series([0.0, 0.0, 0.0, -0.2, 0.0, -0.75], index=daily_dates)
+    assert_series_equal(result, expected, obj="Max drawdown window 2d")
+
+
+def test_excess_returns():
+    replace = Replacer()
+    file = os.path.join(os.path.dirname(__file__), '..', 'resources', 'MIDASER_SPX_USD.csv')
+    df = pd.read_csv(file)
+    df.index = pd.to_datetime(df['Date'])
+
+    market_data = replace('gs_quant.timeseries.econometrics.GsDataApi.get_market_data', Mock())
+    data = df.loc[:, ['USD']]
+    data = data.rename(columns={'USD': 'spot'})
+    market_data.return_value = data
+
+    with pytest.raises(Exception):
+        excess_returns(df['SPX'], Currency.AED)
+
+    actual = excess_returns(df['SPX'], Currency.USD)
+    expected = df['MIDASER']
+    assert_series_equal(actual, expected, check_names=False)
+
+    actual = excess_returns(df['SPX'], Cash('MABCDE', 'T_SHARPE_USD'))
+    assert_series_equal(actual, expected, check_names=False)
+
+    actual = excess_returns(df['SPX'], 0.0175)
+    file = os.path.join(os.path.dirname(__file__), '..', 'resources', 'Sharpe_SPX_0175.csv')
+    expected = pd.read_csv(file).loc[:, 'ER']
+    numpy.testing.assert_array_almost_equal(actual.values, expected.values)
+    replace.restore()
+
+
+def test_sharpe_ratio():
+    file = os.path.join(os.path.dirname(__file__), '..', 'resources', 'MIDASER_SPX_USD.csv')
+    price_df = pd.read_csv(file)
+    price_df.index = pd.to_datetime(price_df['Date'])
+
+    file = os.path.join(os.path.dirname(__file__), '..', 'resources', 'Sharpe_SPX_0175.csv')
+    er_df = pd.read_csv(file)
+    er_df.index = pd.to_datetime(er_df['Date'])
+
+    replace = Replacer()
+    er = replace('gs_quant.timeseries.econometrics.excess_returns', Mock())
+    er.return_value = er_df['ER']
+    actual = _get_ratio(price_df['SPX'], 0.0175, 0, day_count_convention=DayCountConvention.ACTUAL_360)
+    numpy.testing.assert_almost_equal(actual.values, er_df['SR'].values, decimal=5)
+    actual = sharpe_ratio(price_df['SPX'], RiskFreeRateCurrency.USD)
+    numpy.testing.assert_almost_equal(actual.values, er_df['SR'].values, decimal=5)
+    replace.restore()
+
+    actual = _get_ratio(price_df['SPX'], 0.0175, 10, day_count_convention=DayCountConvention.ACTUAL_360)
+    numpy.testing.assert_almost_equal(actual.values, er_df['SR10'].values, decimal=5)
+
+    actual = _get_ratio(er_df['ER'], 0.0175, 0, day_count_convention=DayCountConvention.ACTUAL_360,
+                        curve_type=CurveType.EXCESS_RETURNS)
+    numpy.testing.assert_almost_equal(actual.values, er_df['SR'].values, decimal=5)
 
 
 if __name__ == "__main__":

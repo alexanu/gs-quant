@@ -19,6 +19,7 @@ from urllib.parse import urlencode
 
 from gs_quant.session import GsSession
 from gs_quant.target.backtests import *
+from gs_quant.errors import MqValueError
 
 _logger = logging.getLogger(__name__)
 
@@ -27,12 +28,12 @@ class GsBacktestApi:
     """GS Backtest API client implementation"""
 
     @classmethod
-    def get_backtests(cls,
-                      limit: int = 100,
-                      backtest_id: str = None,
-                      owner_id: str = None,
-                      name: str = None,
-                      mq_symbol: str = None) -> Tuple[Backtest, ...]:
+    def get_many_backtests(cls,
+                           limit: int = 100,
+                           backtest_id: str = None,
+                           owner_id: str = None,
+                           name: str = None,
+                           mq_symbol: str = None) -> Tuple[Backtest, ...]:
         query_string = urlencode(dict(filter(lambda item: item[1] is not None,
                                              dict(id=backtest_id, ownerId=owner_id, name=name,
                                                   mqSymbol=mq_symbol, limit=limit).items())))
@@ -94,7 +95,12 @@ class GsBacktestApi:
         response = GsSession.current._post('/backtests/calculate', backtest, request_headers=request_headers)
 
         # map the response to backtest result
-        backtestResult = BacktestResult(performance=response['Data'], risks=response['RiskData'])
+        if 'Data' in response and 'RiskData' in response:
+            backtestResult = BacktestResult(performance=response['Data'], risks=response['RiskData'])
+        elif 'Data' in response:
+            backtestResult = BacktestResult(performance=response['Data'])
+        else:
+            raise MqValueError('No Data in Response Message.')
 
         return backtestResult
 

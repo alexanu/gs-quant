@@ -21,7 +21,6 @@ import pandas as pd
 
 from gs_quant.api.data import DataApi
 from gs_quant.data.fields import Fields
-from gs_quant.data.utils import construct_dataframe_with_types
 from gs_quant.errors import MqValueError
 
 
@@ -34,8 +33,7 @@ class Dataset:
     class GS(Vendor):
         HOLIDAY = 'HOLIDAY'
         EDRVOL_PERCENT_INTRADAY = 'EDRVOL_PERCENT_INTRADAY'
-        EDRVOL_PERCENT_SHORT = 'EDRVOL_PERCENT_SHORT'
-        EDRVOL_PERCENT_LONG = 'EDRVOL_PERCENT_LONG'
+        EDRVOL_PERCENT_STANDARD = 'EDRVOL_PERCENT_STANDARD'
         MA_RANK = 'MA_RANK'
         EDRVS_INDEX_SHORT = 'EDRVS_INDEX_SHORT'
         EDRVS_INDEX_LONG = 'EDRVS_INDEX_LONG'
@@ -125,7 +123,7 @@ class Dataset:
         )
         data = self.provider.query_data(query, self.id, asset_id_type=asset_id_type)
 
-        return construct_dataframe_with_types(self.id, data)
+        return self.provider.construct_dataframe_with_types(self.id, data)
 
     def get_data_series(
             self,
@@ -174,11 +172,14 @@ class Dataset:
 
         symbol_dimension = symbol_dimensions[0]
         data = self.provider.query_data(query, self.id)
-        df = construct_dataframe_with_types(self.id, data)
+        df = self.provider.construct_dataframe_with_types(self.id, data)
 
-        gb = df.groupby(symbol_dimension)
-        if len(gb.groups) > 1:
-            raise MqValueError('Not a series for a single {}'.format(symbol_dimension))
+        from gs_quant.api.gs.data import GsDataApi
+
+        if isinstance(self.provider, GsDataApi):
+            gb = df.groupby(symbol_dimension)
+            if len(gb.groups) > 1:
+                raise MqValueError('Not a series for a single {}'.format(symbol_dimension))
 
         return pd.Series(index=df.index, data=df.loc[:, field_value].values)
 
@@ -214,13 +215,14 @@ class Dataset:
         )
 
         data = self.provider.last_data(query, self.id)
-        return construct_dataframe_with_types(self.id, data)
+        return self.provider.construct_dataframe_with_types(self.id, data)
 
     def get_coverage(
             self,
             limit: int = None,
             offset: int = None,
-            fields: List[str] = None
+            fields: List[str] = None,
+            **kwargs
     ) -> pd.DataFrame:
         """
         Get the assets covered by this DataSet
@@ -241,7 +243,8 @@ class Dataset:
             self.id,
             limit=limit,
             offset=offset,
-            fields=fields
+            fields=fields,
+            **kwargs
         )
 
         return pd.DataFrame(coverage)

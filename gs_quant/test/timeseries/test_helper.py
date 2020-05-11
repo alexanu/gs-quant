@@ -15,12 +15,12 @@ under the License.
 """
 
 from enum import IntEnum
-
+import pandas as pd
 import pytest
 
 import gs_quant.timeseries as ts
-from gs_quant.timeseries.helper import _create_int_enum, plot_function, plot_measure, normalize_window, Window, \
-    apply_ramp
+from gs_quant.timeseries.helper import _create_int_enum, plot_function, plot_measure, plot_method, normalize_window, \
+    Window, apply_ramp
 
 # TODO test the instance of IntEnum when we have any.
 
@@ -52,11 +52,18 @@ def pm():
     pass
 
 
+@plot_method
+def pmt(arg):
+    return arg
+
+
 def test_decorators():
     assert pf.plot_function
     assert pm.plot_measure
+    assert pmt.plot_method
     assert pm.asset_class is None
     assert pm.asset_type == ('abc',)
+    assert pmt(1, real_time=True) == 1
 
 
 def test_normalize_window_defaults_window_if_none_passed():
@@ -116,6 +123,13 @@ def test_normalize_window_handles_ramp_of_size_zero():
     assert w.r == 0
 
 
+def test_normalize_window_str():
+    x = ts.generate_series(10)
+    w = normalize_window(x, Window('1w', '2d'))
+    assert w.w == pd.DateOffset(weeks=1)
+    assert w.r == pd.DateOffset(days=2)
+
+
 def test_apply_ramp():
     x = ts.generate_series(10)
     y = apply_ramp(x, Window(2, 2))
@@ -126,6 +140,12 @@ def test_apply_ramp_with_window_greater_than_series_length():
     x = ts.generate_series(10)
     y = apply_ramp(x, Window(11, 2))
     assert len(y) == 0
+
+
+def test_apply_ramp_dateoffset():
+    x = pd.Series(range(10), index=pd.bdate_range('2020-02-17', freq='b', periods=10))
+    y = apply_ramp(x, Window(pd.DateOffset(weeks=1), pd.DateOffset(days=1)))
+    assert len(y) == 9
 
 
 def test_apply_ramp_raises_on_edge_cases():

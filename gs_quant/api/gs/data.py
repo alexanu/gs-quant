@@ -18,17 +18,27 @@ from enum import Enum
 from itertools import chain
 from typing import Iterable, List, Optional, Tuple, Union
 
-import pandas as pd
+import logging
+from urllib.parse import urlencode
 
+import cachetools
+import numpy
+import pandas as pd
+from cachetools import TTLCache
+
+from gs_quant.base import Base
 from gs_quant.api.data import DataApi
 from gs_quant.data.core import DataContext
 from gs_quant.errors import MqValueError
 from gs_quant.markets import MarketDataCoordinate
 from gs_quant.session import GsSession
-from gs_quant.target.common import FieldFilterMap, XRef
-from gs_quant.target.data import DataQuery, DataQueryResponse, MDAPIDataBatchResponse, MDAPIDataQueryResponse
+from gs_quant.target.common import FieldFilterMap, XRef, MarketDataVendor, PricingLocation
+from gs_quant.target.data import DataQuery, DataQueryResponse, MDAPIDataBatchResponse, MDAPIDataQuery,\
+    MDAPIDataQueryResponse
 from gs_quant.target.data import DataSetEntity
 from .assets import GsAssetApi, GsIdType
+
+_logger = logging.getLogger(__name__)
 
 
 class QueryType(Enum):
@@ -37,6 +47,7 @@ class QueryType(Enum):
     AVERAGE_IMPLIED_VOLATILITY = "Average Implied Volatility"
     AVERAGE_IMPLIED_VARIANCE = "Average Implied Variance"
     SWAP_RATE = "Swap Rate"
+    BASIS_SWAP_RATE = "Basis Swap Rate"
     SWAPTION_VOL = "Swaption Vol"
     MIDCURVE_VOL = "Midcurve Vol"
     CAP_FLOOR_VOL = "Cap Floor Vol"
@@ -51,6 +62,25 @@ class QueryType(Enum):
     CAP_FLOOR_ATM_FWD_RATE = "Cap Floor Atm Fwd Rate"
     SPREAD_OPTION_ATM_FWD_RATE = "Spread Option Atm Fwd Rate"
     FORECAST = "Forecast"
+    IMPLIED_VOLATILITY_BY_DELTA_STRIKE = "Implied Volatility By Delta Strike"
+    FUNDAMENTAL_METRIC = "Fundamental Metric"
+    POLICY_RATE_EXPECTATION = "Policy Rate Expectation"
+    CENTRAL_BANK_SWAP_RATE = "Central Bank Swap Rate"
+    FORWARD_PRICE = "Forward Price"
+    SPOT = "Spot"
+    ES_NUMERIC_SCORE = "ES Numeric Score"
+    ES_NUMERIC_PERCENTILE = "ES Numeric Percentile"
+    ES_POLICY_SCORE = "ES Policy Score"
+    ES_POLICY_PERCENTILE = "ES Policy Percentile"
+    ES_SCORE = "ES Score"
+    ES_PERCENTILE = "ES Percentile"
+    G_SCORE = "G Score"
+    G_PERCENTILE = "G Percentile"
+    ES_MOMENTUM_SCORE = "ES Momentum Score"
+    ES_MOMENTUM_PERCENTILE = "ES Momentum Percentile"
+    G_REGIONAL_SCORE = "G Regional Score"
+    G_REGIONAL_PERCENTILE = "G Regional Percentile"
+    ES_DISCLOSURE_PERCENTAGE = "ES Disclosure Percentage"
 
 
 class GsDataApi(DataApi):
@@ -60,9 +90,10 @@ class GsDataApi(DataApi):
     # DataApi interface
 
     @classmethod
-    def query_data(cls, query: DataQuery, dataset_id: str = None, asset_id_type: Union[GsIdType, str] = None) \
+    def query_data(cls, query: Union[DataQuery, MDAPIDataQuery], dataset_id: str = None,
+                   asset_id_type: Union[GsIdType, str] = None)\
             -> Union[MDAPIDataBatchResponse, DataQueryResponse, tuple]:
-        if query.marketDataCoordinates:
+        if isinstance(query, MDAPIDataQuery) and query.market_data_coordinates:
             # Don't use MDAPIDataBatchResponse for now - it doesn't handle quoting style correctly
             results: Union[MDAPIDataBatchResponse, dict] = GsSession.current._post(
                 '/data/coordinates/query', payload=query)
@@ -70,7 +101,7 @@ class GsDataApi(DataApi):
                 return results.get('responses', ())
             else:
                 return results.responses if results.responses is not None else ()
-        if query.where:
+        elif isinstance(query, DataQuery) and query.where:
             where = query.where.as_dict()
             xref_keys = set(where.keys()).intersection(XRef.properties())
             if xref_keys:
@@ -200,6 +231,21 @@ class GsDataApi(DataApi):
 
         return definition
 
+    @classmethod
+    def get_many_definitions(cls,
+                             limit: int = 100,
+                             dataset_id: str = None,
+                             owner_id: str = None,
+                             name: str = None,
+                             mq_symbol: str = None) -> Tuple[DataSetEntity, ...]:
+
+        query_string = urlencode(dict(filter(lambda item: item[1] is not None,
+                                             dict(id=dataset_id, ownerId=owner_id, name=name,
+                                                  mqSymbol=mq_symbol, limit=limit).items())))
+
+        res = GsSession.current._get('/data/datasets?{query}'.format(query=query_string), cls=DataSetEntity)['results']
+        return res
+
     @staticmethod
     def build_market_data_query(asset_ids: List[str], query_type: QueryType, where: Union[FieldFilterMap] = None,
                                 source: Union[str] = None, real_time: bool = False):
@@ -229,12 +275,14 @@ class GsDataApi(DataApi):
         body = GsSession.current._post('/data/markets', payload=query)
         container = body['responses'][0]['queryResponse'][0]
         if 'errorMessages' in container:
-            raise MqValueError(container['errorMessages'])
+            raise MqValueError(f"market data request {body['requestId']} failed: {container['errorMessages']}")
         if 'response' not in container:
-            return pd.DataFrame()
-        df = pd.DataFrame(container['response']['data'])
-        df.set_index('date' if 'date' in df.columns else 'time', inplace=True)
-        df.index = pd.to_datetime(df.index)
+            df = MarketDataResponseFrame()
+        else:
+            df = MarketDataResponseFrame(container['response']['data'])
+            df.set_index('date' if 'date' in df.columns else 'time', inplace=True)
+            df.index = pd.to_datetime(df.index)
+        df.dataset_ids = tuple(container.get('dataSetIds', ()))
         return df
 
     @classmethod
@@ -312,17 +360,34 @@ class GsDataApi(DataApi):
     def coordinates_last(
             cls,
             coordinates: Union[Iterable[str], Iterable[MarketDataCoordinate]],
-            as_of: Union[dt.date, dt.datetime],
-            vendor: str = 'Goldman Sachs',
+            as_of: Union[dt.datetime, dt.date] = None,
+            vendor: MarketDataVendor = MarketDataVendor.Goldman_Sachs,
             as_dataframe: bool = False,
+            pricing_location: Optional[PricingLocation] = None
     ) -> Union[dict, pd.DataFrame]:
+        """
+        Get last value of coordinates data
+
+        :param coordinates: market data coordinate(s)
+        :param as_of: snapshot date or time
+        :param vendor: data vendor
+        :param as_dataframe: whether to return the result as Dataframe
+        :param pricing_location: the location where close data has been recorded (not used for real-time query)
+        :return: Dataframe or dictionary of the returned data
+
+        **Examples**
+
+        >>> coordinate = ("FX Fwd_USD/EUR_Fwd Pt_2y",)
+        >>> data = GsDataApi.coordinates_last(coordinate, dt.datetime(2019, 11, 19))
+        """
         market_data_coordinates = tuple(cls._coordinate_from_str(coord) if isinstance(coord, str) else coord
                                         for coord in coordinates)
         ret = {coordinate: None for coordinate in market_data_coordinates}
         query = cls.build_query(
             end=as_of,
             market_data_coordinates=market_data_coordinates,
-            vendor=vendor
+            vendor=vendor,
+            pricing_location=pricing_location
         )
 
         data = cls.last_data(query)
@@ -343,18 +408,36 @@ class GsDataApi(DataApi):
     def coordinates_data(
             cls,
             coordinates: Union[str, MarketDataCoordinate, Iterable[str], Iterable[MarketDataCoordinate]],
-            start: Optional[Union[dt.date, dt.datetime]] = None,
-            end: Optional[Union[dt.date, dt.datetime]] = None,
-            vendor: str = 'Goldman Sachs',
-            as_multiple_dataframes: bool = False
+            start: Union[dt.datetime, dt.date] = None,
+            end: Union[dt.datetime, dt.date] = None,
+            vendor: MarketDataVendor = MarketDataVendor.Goldman_Sachs,
+            as_multiple_dataframes: bool = False,
+            pricing_location: Optional[PricingLocation] = None
     ) -> Union[pd.DataFrame, Tuple[pd.DataFrame]]:
-        coordinates_iterable = (coordinates, ) if isinstance(coordinates, (MarketDataCoordinate, str)) else coordinates
+        """
+        Get coordinates data
+
+        :param coordinates: market data coordinate(s)
+        :param start: start date or time
+        :param end: end date or time
+        :param vendor: data vendor
+        :param as_multiple_dataframes: whether to return the result as one or multiple Dataframe(s)
+        :param pricing_location: the location where close data has been recorded (not used for real-time query)
+        :return: Dataframe(s) of the returned data
+
+        **Examples**
+
+        >>> coordinate = ("FX Fwd_USD/EUR_Fwd Pt_2y",)
+        >>> data = GsDataApi.coordinates_data(coordinate, dt.datetime(2019, 11, 18), dt.datetime(2019, 11, 19))
+        """
+        coordinates_iterable = (coordinates,) if isinstance(coordinates, (MarketDataCoordinate, str)) else coordinates
         query = cls.build_query(
             market_data_coordinates=tuple(cls._coordinate_from_str(coord) if isinstance(coord, str) else coord
                                           for coord in coordinates_iterable),
             vendor=vendor,
             start=start,
-            end=end
+            end=end,
+            pricing_location=pricing_location
         )
 
         results = cls.__normalise_coordinate_data(cls.query_data(query))
@@ -368,14 +451,31 @@ class GsDataApi(DataApi):
     def coordinates_data_series(
             cls,
             coordinates: Union[str, MarketDataCoordinate, Iterable[str], Iterable[MarketDataCoordinate]],
-            start: Optional[Union[dt.date, dt.datetime]] = None,
-            end: Optional[Union[dt.date, dt.datetime]] = None,
-            vendor: str = 'Goldman Sachs',
+            start: Union[dt.datetime, dt.date] = None,
+            end: Union[dt.datetime, dt.date] = None,
+            vendor: MarketDataVendor = MarketDataVendor.Goldman_Sachs,
+            pricing_location: Optional[PricingLocation] = None
     ) -> Union[pd.Series, Tuple[pd.Series]]:
+        """
+        Get coordinates data series
+
+        :param coordinates: market data coordinate(s)
+        :param start: start date or time
+        :param end: end date or time
+        :param vendor: data vendor
+        :param pricing_location: the location where close data has been recorded (not used for real-time query)
+        :return: Series of the returned data
+
+        **Examples**
+
+        >>> coordinate = ("FX Fwd_USD/EUR_Fwd Pt_2y",)
+        >>> data = GsDataApi.coordinates_data_series(coordinate, dt.datetime(2019, 11, 18), dt.datetime(2019, 11, 19))
+        """
         dfs = cls.coordinates_data(
             coordinates,
             start=start,
             end=end,
+            pricing_location=pricing_location,
             vendor=vendor,
             as_multiple_dataframes=True)
 
@@ -384,3 +484,52 @@ class GsDataApi(DataApi):
             return ret[0]
         else:
             return ret
+
+    @staticmethod
+    @cachetools.cached(TTLCache(ttl=3600, maxsize=128))
+    def get_types(dataset_id: str):
+        results = GsSession.current._get(f'/data/catalog/{dataset_id}')
+        fields = results.get("fields")
+        if fields:
+            field_types = {}
+            for key, value in fields.items():
+                field_type = value.get('type')
+                field_format = value.get('format')
+                field_types[key] = field_format or field_type
+            return field_types
+        raise RuntimeError(f"Unable to get Dataset schema for {dataset_id}")
+
+    @classmethod
+    def construct_dataframe_with_types(cls, dataset_id: str, data: Union[Base, list, tuple]) -> pd.DataFrame:
+        """
+        Constructs a dataframe with correct date types.
+        :param data: data to convert with correct types
+        :return: dataframe with correct types
+        """
+        if len(data):
+            dataset_types = cls.get_types(dataset_id)
+            df = pd.DataFrame(data)
+
+            for field_name, type_name in dataset_types.items():
+                if df.get(field_name) is not None and type_name in ('date', 'date-time'):
+                    df = df.astype({field_name: numpy.datetime64})
+
+            field_names = dataset_types.keys()
+
+            if 'date' in field_names:
+                df = df.set_index('date')
+            elif 'time' in field_names:
+                df = df.set_index('time')
+
+            return df
+        else:
+            return pd.DataFrame({})
+
+
+class MarketDataResponseFrame(pd.DataFrame):
+    _internal_names = pd.DataFrame._internal_names + ['dataset_ids']
+    _internal_names_set = set(_internal_names)
+
+    @property
+    def _constructor(self):
+        return MarketDataResponseFrame

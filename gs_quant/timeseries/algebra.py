@@ -20,6 +20,7 @@ import math
 
 from .datetime import *
 from .helper import plot_function
+from gs_quant.errors import MqTypeError
 
 """
 Algebra library contains basic numerical and algebraic operations, including addition, division, multiplication,
@@ -554,6 +555,7 @@ def filter_(x: pd.Series, operator: Optional[FilterOperator] = None, value: Opti
     """
     Removes values where comparison with the operator and value combination results in true, defaults to removing
     missing values from the series
+
     :param x: timeseries
     :param operator: FilterOperator describing logic for value removal, e.g 'less_than'
     :param value: number indicating value(s) to remove from the series
@@ -606,3 +608,102 @@ def filter_(x: pd.Series, operator: Optional[FilterOperator] = None, value: Opti
             raise MqValueError('Unexpected operator: ' + operator)
         x = x.drop(x[remove].index)
     return x
+
+
+@plot_function
+def repeat(x: pd.Series, n: int = 1) -> pd.Series:
+    """
+    Repeats values for days where data is missing. For any date with missing data, the last recorded value is used.
+    Optionally downsamples the result such that there are data points every n days.
+
+    :param x: date-based timeseries
+    :param n: desired frequency of output
+    :return: a timeseries that has been forward-filled, and optionally downsampled
+
+    **Usage**
+
+    Fill missing values with last seen value e.g. to combine daily with weekly or monthly data.
+    """
+    if not 0 < n < 367:
+        raise MqValueError('n must be between 0 and 367')
+    index = pd.date_range(freq=f'{n}D', start=x.index[0], end=x.index[-1])
+    return x.reindex(index, method='ffill')
+
+
+def _sum_boolean_series(*series):
+    if not 2 <= len(series) <= 100:
+        raise MqValueError('expected between 2 and 100 arguments')
+
+    for s in series:
+        if not isinstance(s, pd.Series):
+            raise MqTypeError('all arguments must be series')
+        if not all(map(lambda a: a in (0, 1), s.values)):
+            raise MqValueError(f'cannot perform operation on series with value(s) other than 1 and 0: {s.values}')
+
+    current = series[0].add(series[1], fill_value=0)
+    for s in series[2:]:
+        current = current.add(s, fill_value=0)
+    return current
+
+
+@plot_function
+def and_(*series: pd.Series) -> pd.Series:
+    """
+    Logical "and" of two or more boolean series.
+
+    :param series: input series
+    :return: result series (of numeric type, with booleans represented as 1s and 0s)
+    """
+    s = _sum_boolean_series(*series)
+    return (s == len(series)).astype(int)
+
+
+@plot_function
+def or_(*series: pd.Series) -> pd.Series:
+    """
+    Logical "or" of two or more boolean series.
+
+    :param series: input series
+    :return: result series (of numeric type, with booleans represented as 1s and 0s)
+    """
+    s = _sum_boolean_series(*series)
+    return (s > 0).astype(int)
+
+
+@plot_function
+def not_(series: pd.Series) -> pd.Series:
+    """
+    Logical negation of a single boolean series.
+
+    :param series: single input series
+    :return: result series (of numeric type, with booleans represented as 1s and 0s)
+    """
+    if not all(map(lambda a: a in (0, 1), series.values)):
+        raise MqValueError(f'cannot negate series with value(s) other than 1 and 0: {series.values}')
+    return series.replace([0, 1], [1, 0])
+
+
+@plot_function
+def if_(flags: pd.Series, x: Union[pd.Series, float], y: Union[pd.Series, float]) -> pd.Series:
+    """
+    Returns a series s. For i in the index of flags, s[i] = x[i] if flags[i] == 1 else y[i].
+
+    :param flags: series of 1s and 0s
+    :param x: values to use when flag is 1
+    :param y: values to use when flag is 0
+    :return: result series
+    """
+    if not all(map(lambda a: a in (0, 1), flags.values)):
+        raise MqValueError(f'cannot perform "if" on series with value(s) other than 1 and 0: {flags.values}')
+
+    def ensure_series(s):
+        if isinstance(s, (float, int)):
+            return flags, pd.Series([s] * flags.shape[0], index=flags.index)
+        elif isinstance(s, pd.Series):
+            return flags.align(s)
+        else:
+            raise MqTypeError('expected a number or series')
+
+    x_flags, x = ensure_series(x)
+    y_flags, y = ensure_series(y)
+    return pd.concat([x[x_flags == 1], y[y_flags == 0]]).sort_index()

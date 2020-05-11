@@ -5,14 +5,18 @@ Asset
 
 .. autoclass:: Asset
 
-   .. automethod:: get_identifiers
+   
+   .. automethod:: __init__
+
    
    .. rubric:: Methods
 
    .. autosummary::
    
       ~Asset.__init__
+      ~Asset.get_identifier
       ~Asset.get_identifiers
+      ~Asset.get_marquee_id
       ~Asset.get_type
    
    
